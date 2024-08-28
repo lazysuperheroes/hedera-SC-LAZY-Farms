@@ -1,0 +1,1498 @@
+[
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_lazyToken",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "_lazyGasStation",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "_lazyDelegateRegistry",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "_signingWallet",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_burnPercentage",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_distributionPeriod",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_boostRateCap",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint16",
+                "name": "_periodForBonus",
+                "type": "uint16"
+            },
+            {
+                "internalType": "uint16",
+                "name": "_hodlBonusRate",
+                "type": "uint16"
+            },
+            {
+                "internalType": "uint16",
+                "name": "_maxBonusTimePeriods",
+                "type": "uint16"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_lazyMaxSupply",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_halfAfter",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
+    },
+    {
+        "inputs": [],
+        "name": "AssociationFailed",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "BadArguments",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "BatchAssociationFailed",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "FailedToInitialize",
+        "type": "error"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "enum TokenStaker.TransferDirection",
+                "name": "_direction",
+                "type": "uint8"
+            }
+        ],
+        "name": "NFTTransferFailed",
+        "type": "error"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_value",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_cap",
+                "type": "uint256"
+            }
+        ],
+        "name": "RateCapExceeded",
+        "type": "error"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "_rewardAmount",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "_burnPercentage",
+                "type": "uint256"
+            }
+        ],
+        "name": "ClaimedRewards",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "previousOwner",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "newOwner",
+                "type": "address"
+            }
+        ],
+        "name": "OwnershipTransferred",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "collection",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256[]",
+                "name": "serials",
+                "type": "uint256[]"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256[]",
+                "name": "rewards",
+                "type": "uint256[]"
+            }
+        ],
+        "name": "StakedNFT",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "string",
+                "name": "_functionName",
+                "type": "string"
+            },
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "_sender",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "_amount",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "string",
+                "name": "_message",
+                "type": "string"
+            }
+        ],
+        "name": "StakingMessage",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "collection",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256[]",
+                "name": "serials",
+                "type": "uint256[]"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256[]",
+                "name": "rewards",
+                "type": "uint256[]"
+            }
+        ],
+        "name": "UnstakedNFT",
+        "type": "event"
+    },
+    {
+        "stateMutability": "payable",
+        "type": "fallback"
+    },
+    {
+        "inputs": [],
+        "name": "DIVISOR",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "HALF_AFTER",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "LAZY_MAX_SUPPLY",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "LAZY_SCT",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "SCALAR",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address[]",
+                "name": "tokenIds",
+                "type": "address[]"
+            }
+        ],
+        "name": "batchTokenAssociate",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "boostRateCap",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "burnPercentage",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            }
+        ],
+        "name": "calculateRewards",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "lazyEarnt",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "rewardRate",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "asOfTimestamp",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "userLastClaim",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "checkHalvening",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "claimRewards",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "rewardPaid",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "currentEpoch",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "distributionPeriod",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "name": "epochPoints",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "name": "epochValues",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            }
+        ],
+        "name": "getActiveBoostRate",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            }
+        ],
+        "name": "getBaseRewardRate",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_collection",
+                "type": "address"
+            }
+        ],
+        "name": "getMaxBaseRate",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_collection",
+                "type": "address"
+            }
+        ],
+        "name": "getNumStakedNFTs",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getStakableCollections",
+        "outputs": [
+            {
+                "internalType": "address[]",
+                "name": "collections",
+                "type": "address[]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            }
+        ],
+        "name": "getStakedNFTs",
+        "outputs": [
+            {
+                "internalType": "address[]",
+                "name": "collections",
+                "type": "address[]"
+            },
+            {
+                "internalType": "uint256[][]",
+                "name": "serials",
+                "type": "uint256[][]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_collection",
+                "type": "address"
+            }
+        ],
+        "name": "getStakedSerials",
+        "outputs": [
+            {
+                "internalType": "uint256[]",
+                "name": "serials",
+                "type": "uint256[]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getStakingUsers",
+        "outputs": [
+            {
+                "internalType": "address[]",
+                "name": "users",
+                "type": "address[]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "token",
+                "type": "address"
+            }
+        ],
+        "name": "getTokenExpiryInfo",
+        "outputs": [
+            {
+                "internalType": "int256",
+                "name": "responseCode",
+                "type": "int256"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "int64",
+                        "name": "second",
+                        "type": "int64"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "autoRenewAccount",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "int64",
+                        "name": "autoRenewPeriod",
+                        "type": "int64"
+                    }
+                ],
+                "internalType": "struct IHederaTokenService.Expiry",
+                "name": "expiryInfo",
+                "type": "tuple"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "token",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "keyType",
+                "type": "uint256"
+            }
+        ],
+        "name": "getTokenKey",
+        "outputs": [
+            {
+                "internalType": "int64",
+                "name": "responseCode",
+                "type": "int64"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "bool",
+                        "name": "inheritAccountKey",
+                        "type": "bool"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "contractId",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "bytes",
+                        "name": "ed25519",
+                        "type": "bytes"
+                    },
+                    {
+                        "internalType": "bytes",
+                        "name": "ECDSA_secp256k1",
+                        "type": "bytes"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "delegatableContractId",
+                        "type": "address"
+                    }
+                ],
+                "internalType": "struct IHederaTokenService.KeyValue",
+                "name": "key",
+                "type": "tuple"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "token",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            }
+        ],
+        "name": "grantTokenKyc",
+        "outputs": [
+            {
+                "internalType": "int64",
+                "name": "responseCode",
+                "type": "int64"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "hodlBonusRate",
+        "outputs": [
+            {
+                "internalType": "uint16",
+                "name": "",
+                "type": "uint16"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "token",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            }
+        ],
+        "name": "isKyc",
+        "outputs": [
+            {
+                "internalType": "int64",
+                "name": "responseCode",
+                "type": "int64"
+            },
+            {
+                "internalType": "bool",
+                "name": "kycGranted",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "components": [
+                    {
+                        "internalType": "address",
+                        "name": "collection",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint256[]",
+                        "name": "serials",
+                        "type": "uint256[]"
+                    },
+                    {
+                        "internalType": "uint256[]",
+                        "name": "rewards",
+                        "type": "uint256[]"
+                    }
+                ],
+                "internalType": "struct ILazyNFTStaking.Stake[]",
+                "name": "_stakes",
+                "type": "tuple[]"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "uint256",
+                        "name": "boostRate",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "validityTimestamp",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "bytes",
+                        "name": "signature",
+                        "type": "bytes"
+                    }
+                ],
+                "internalType": "struct ILazyNFTStaking.RewardProof",
+                "name": "_rewardProof",
+                "type": "tuple"
+            }
+        ],
+        "name": "isValidSignature",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "lazyDelegateRegistry",
+        "outputs": [
+            {
+                "internalType": "contract ILazyDelegateRegistry",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "lazyGasStation",
+        "outputs": [
+            {
+                "internalType": "contract ILazyGasStation",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "lazyToken",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "maxBonusTimePeriods",
+        "outputs": [
+            {
+                "internalType": "uint16",
+                "name": "",
+                "type": "uint16"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address[]",
+                "name": "tokenIds",
+                "type": "address[]"
+            },
+            {
+                "internalType": "address[]",
+                "name": "existingTokenIds",
+                "type": "address[]"
+            }
+        ],
+        "name": "noClashBatchTokenAssociate",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "owner",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "token",
+                "type": "address"
+            }
+        ],
+        "name": "pauseToken",
+        "outputs": [
+            {
+                "internalType": "int256",
+                "name": "responseCode",
+                "type": "int256"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "periodForBonus",
+        "outputs": [
+            {
+                "internalType": "uint16",
+                "name": "",
+                "type": "uint16"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address[]",
+                "name": "_collectionAddress",
+                "type": "address[]"
+            }
+        ],
+        "name": "removeStakeableCollection",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "renounceOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_receiver",
+                "type": "address"
+            },
+            {
+                "internalType": "int64",
+                "name": "_amount",
+                "type": "int64"
+            }
+        ],
+        "name": "retrieveLazy",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "token",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            }
+        ],
+        "name": "revokeTokenKyc",
+        "outputs": [
+            {
+                "internalType": "int64",
+                "name": "responseCode",
+                "type": "int64"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address[]",
+                "name": "tokenIds",
+                "type": "address[]"
+            }
+        ],
+        "name": "safeBatchTokenAssociate",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_boostRateCap",
+                "type": "uint256"
+            }
+        ],
+        "name": "setBoostRateCap",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_burnPercentage",
+                "type": "uint256"
+            }
+        ],
+        "name": "setBurnPercentage",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_distributionPeriod",
+                "type": "uint256"
+            }
+        ],
+        "name": "setDistributionPeriod",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint16",
+                "name": "_hodlBonusRate",
+                "type": "uint16"
+            }
+        ],
+        "name": "setHodlBonusRate",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint16",
+                "name": "_maxBonusTimePeriods",
+                "type": "uint16"
+            }
+        ],
+        "name": "setMaxBonusTimePeriods",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint16",
+                "name": "_periodForBonus",
+                "type": "uint16"
+            }
+        ],
+        "name": "setPeriodForBonus",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address[]",
+                "name": "_collectionAddress",
+                "type": "address[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "_maxRewardRate",
+                "type": "uint256[]"
+            }
+        ],
+        "name": "setStakeableCollection",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_systemWallet",
+                "type": "address"
+            }
+        ],
+        "name": "setSystemWallet",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "components": [
+                    {
+                        "internalType": "address",
+                        "name": "collection",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint256[]",
+                        "name": "serials",
+                        "type": "uint256[]"
+                    },
+                    {
+                        "internalType": "uint256[]",
+                        "name": "rewards",
+                        "type": "uint256[]"
+                    }
+                ],
+                "internalType": "struct ILazyNFTStaking.Stake[]",
+                "name": "_stakes",
+                "type": "tuple[]"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "uint256",
+                        "name": "boostRate",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "validityTimestamp",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "bytes",
+                        "name": "signature",
+                        "type": "bytes"
+                    }
+                ],
+                "internalType": "struct ILazyNFTStaking.RewardProof",
+                "name": "_rewardProof",
+                "type": "tuple"
+            }
+        ],
+        "name": "stake",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "systemWallet",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "tokenId",
+                "type": "address"
+            }
+        ],
+        "name": "tokenAssociate",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "totalItemsStaked",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address payable",
+                "name": "receiverAddress",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256"
+            }
+        ],
+        "name": "transferHbar",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "newOwner",
+                "type": "address"
+            }
+        ],
+        "name": "transferOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "token",
+                "type": "address"
+            }
+        ],
+        "name": "unpauseToken",
+        "outputs": [
+            {
+                "internalType": "int256",
+                "name": "responseCode",
+                "type": "int256"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "components": [
+                    {
+                        "internalType": "address",
+                        "name": "collection",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint256[]",
+                        "name": "serials",
+                        "type": "uint256[]"
+                    },
+                    {
+                        "internalType": "uint256[]",
+                        "name": "rewards",
+                        "type": "uint256[]"
+                    }
+                ],
+                "internalType": "struct ILazyNFTStaking.Stake[]",
+                "name": "_stakes",
+                "type": "tuple[]"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "uint256",
+                        "name": "boostRate",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "validityTimestamp",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "bytes",
+                        "name": "signature",
+                        "type": "bytes"
+                    }
+                ],
+                "internalType": "struct ILazyNFTStaking.RewardProof",
+                "name": "_rewardProof",
+                "type": "tuple"
+            }
+        ],
+        "name": "unstake",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_collection",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "_serials",
+                "type": "uint256[]"
+            }
+        ],
+        "name": "unstakeAnyNFT",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_collection",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "_serials",
+                "type": "uint256[]"
+            }
+        ],
+        "name": "unstakeUnauthorizedNFT",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address[]",
+                "name": "_collection",
+                "type": "address[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "_maxRewardRate",
+                "type": "uint256[]"
+            }
+        ],
+        "name": "updateMaxBaseRate",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "token",
+                "type": "address"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "int64",
+                        "name": "second",
+                        "type": "int64"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "autoRenewAccount",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "int64",
+                        "name": "autoRenewPeriod",
+                        "type": "int64"
+                    }
+                ],
+                "internalType": "struct IHederaTokenService.Expiry",
+                "name": "expiryInfo",
+                "type": "tuple"
+            }
+        ],
+        "name": "updateTokenExpiryInfo",
+        "outputs": [
+            {
+                "internalType": "int256",
+                "name": "responseCode",
+                "type": "int256"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "token",
+                "type": "address"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "uint256",
+                        "name": "keyType",
+                        "type": "uint256"
+                    },
+                    {
+                        "components": [
+                            {
+                                "internalType": "bool",
+                                "name": "inheritAccountKey",
+                                "type": "bool"
+                            },
+                            {
+                                "internalType": "address",
+                                "name": "contractId",
+                                "type": "address"
+                            },
+                            {
+                                "internalType": "bytes",
+                                "name": "ed25519",
+                                "type": "bytes"
+                            },
+                            {
+                                "internalType": "bytes",
+                                "name": "ECDSA_secp256k1",
+                                "type": "bytes"
+                            },
+                            {
+                                "internalType": "address",
+                                "name": "delegatableContractId",
+                                "type": "address"
+                            }
+                        ],
+                        "internalType": "struct IHederaTokenService.KeyValue",
+                        "name": "key",
+                        "type": "tuple"
+                    }
+                ],
+                "internalType": "struct IHederaTokenService.TokenKey[]",
+                "name": "keys",
+                "type": "tuple[]"
+            }
+        ],
+        "name": "updateTokenKeys",
+        "outputs": [
+            {
+                "internalType": "int64",
+                "name": "responseCode",
+                "type": "int64"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "stateMutability": "payable",
+        "type": "receive"
+    }
+]
