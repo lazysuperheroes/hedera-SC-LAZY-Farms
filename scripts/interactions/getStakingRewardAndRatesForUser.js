@@ -8,6 +8,7 @@ const fs = require('fs');
 const { ethers } = require('ethers');
 const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
 const { getArgFlag } = require('../../utils/nodeHelpers');
+const { getTokenDetails } = require('../../utils/hederaMirrorHelpers');
 
 // Get operator from .env file
 let operatorId;
@@ -58,6 +59,32 @@ const main = async () => {
 	);
 
 	const lnsIface = new ethers.Interface(lnsJSON.abi);
+
+	// get the lazyToken from the contract using lazyToken method via mirror node (readOnlyEVMFromMirrorNode)
+	const encodedCommand0 = lnsIface.encodeFunctionData(
+		'lazyToken',
+		[],
+	);
+
+	const result0 = await readOnlyEVMFromMirrorNode(
+		env,
+		contractId,
+		encodedCommand0,
+		operatorId,
+		false,
+	);
+
+	const lazyToken = TokenId.fromSolidityAddress(lnsIface.decodeFunctionResult(
+		'lazyToken',
+		result0,
+	)[0]);
+
+	const lazyTokenDetails = await getTokenDetails(env, lazyToken);
+
+	const lazyDecimals = lazyTokenDetails.decimals;
+
+	console.log('\n-Lazy Token:', lazyToken.toString(), 'Decimals:', lazyDecimals);
+
 
 	// query the EVM via mirror node (readOnlyEVMFromMirrorNode)
 
@@ -137,10 +164,10 @@ const main = async () => {
 		result4,
 	);
 
-	console.log('\n-Base Reward Rate:', baseRewardRate);
-	console.log('\n-Active Boost Rate:', activeBoostRate);
-	console.log('\n-Lazy Earnt:', Number(rewards[0]));
-	console.log('\n-Total Reward Rate:', Number(rewards[1]));
+	console.log('\n-Base Reward Rate:', Number(baseRewardRate) / 10 ** lazyDecimals);
+	console.log('\n-Active Boost Rate:', Number(activeBoostRate) / 10 ** lazyDecimals);
+	console.log('\n-Lazy Earnt:', Number(rewards[0]) / 10 ** lazyDecimals);
+	console.log('\n-Total Reward Rate:', Number(rewards[1]) / 10 ** lazyDecimals);
 	console.log('\n-As Of:', Number(rewards[2]), `${new Date(Number(rewards[2]) * 1000).toISOString()}`);
 	console.log('\n-Last Claim:', Number(rewards[3]), `${new Date(Number(rewards[3]) * 1000).toISOString()}`);
 	// output stakedNFTs which is of type [address[] memory collections, uint256[][] memory serials]

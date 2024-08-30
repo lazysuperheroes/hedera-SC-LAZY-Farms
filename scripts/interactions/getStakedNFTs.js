@@ -81,7 +81,7 @@ const main = async () => {
 	// expect an array of 2 arrays [collections array, array of serials array]
 	console.log('Raw:', tokensAndSerials);
 	for (let t = 0; t < tokensAndSerials[0].length; t++) {
-		console.log('\nToken:', TokenId.fromSolidityAddress(tokensAndSerials[0][t].toString()), '\nSerials:', tokensAndSerials[1][t]);
+		console.log('\nToken:', TokenId.fromSolidityAddress(tokensAndSerials[0][t].toString()).toString(), '\nSerials:', tokensAndSerials[1][t]);
 	}
 
 };
