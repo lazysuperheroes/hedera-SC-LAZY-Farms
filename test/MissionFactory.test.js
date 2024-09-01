@@ -173,7 +173,7 @@ describe('Deployment', () => {
 		}
 		else {
 			bobPK = PrivateKey.generateED25519();
-			bobId = await accountCreator(client, bobPK, 80);
+			bobId = await accountCreator(client, bobPK, 100);
 			console.log(
 				'Bob account ID:',
 				bobId.toString(),

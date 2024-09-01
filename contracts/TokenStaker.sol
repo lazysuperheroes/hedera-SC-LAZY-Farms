@@ -4,8 +4,8 @@ pragma solidity >=0.8.12 <0.9.0;
 /// @title Core Staking Module for NFTs
 /// @author stowerling.eth / stowerling.hbar
 /// @notice This smart contract handles the movement of NFTs between the user and other contracts
-/// @dev hands off the FT handling to the thwe LazyGasStation contract
-/// @dev requires FT for royalty handling currently
+/// @dev Uses hbar for royalties making it generic
+/// @version 1.0 - 1 tinybar only.
 
 import { HederaResponseCodes } from "./HederaResponseCodes.sol";
 import { HederaTokenService } from "./HederaTokenService.sol";
