@@ -76,7 +76,7 @@ const main = async () => {
 		result,
 	);
 	console.log('Raw:', tokens);
-	console.log('Stakeable Collections:', tokens[0].map((u) => TokenId.fromString(u).toString()).join(', '));
+	console.log('Stakeable Collections:', tokens[0].map((u) => TokenId.fromSolidityAddress(u).toString()).join(', '));
 
 };
 
