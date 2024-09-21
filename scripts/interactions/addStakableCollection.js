@@ -11,6 +11,7 @@ const { ethers } = require('ethers');
 const readlineSync = require('readline-sync');
 const { contractExecuteFunction } = require('../../utils/solidityHelpers');
 const { getArgFlag } = require('../../utils/nodeHelpers');
+const { getTokenDetails } = require('../../utils/hederaMirrorHelpers');
 
 // Get operator from .env file
 let operatorKey;
@@ -21,6 +22,18 @@ try {
 }
 catch (err) {
 	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
+}
+
+const LAZY_TOKEN = process.env.LAZY_TOKEN_ID;
+
+if (operatorKey === undefined || operatorKey == null || operatorId === undefined || operatorId == null) {
+	console.log('Environment required, please specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
+	process.exit(1);
+}
+
+if (LAZY_TOKEN === undefined || LAZY_TOKEN == null) {
+	console.log('Environment required, please specify LAZY_TOKEN_ID in the .env file');
+	process.exit(1);
 }
 
 const contractName = 'LazyNFTStaking';
@@ -102,6 +115,16 @@ const main = async () => {
 	console.log('\n-Using Operator:', operatorId.toString());
 	console.log('\n-Using Contract:', contractId.toString());
 	console.log('\n-Collection(s):', tokenList.map((t) => t.toString()).join(', '));
+
+	// get the Lazy token info
+	const lazyTokenInfo = await getTokenDetails(env, LAZY_TOKEN);
+
+	// for each token, get the token info form the mirror
+	for (const token of tokenList) {
+		const tokenInfo = await getTokenDetails(env, token.toString());
+		console.log('-Token:', token.toString(), 'Symbol:', tokenInfo.symbol, 'Name:', tokenInfo.name, 'Max Reward Rate:', rewardRates[tokenList.indexOf(token)] / 10 ** lazyTokenInfo.decimals, lazyTokenInfo.symbol);
+	}
+
 	console.log('\n-Reward Rate:', rewardRates);
 
 	// import ABI
