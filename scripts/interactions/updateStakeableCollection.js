@@ -75,7 +75,7 @@ const main = async () => {
 		console.log('		0.0.SSS is the LazyNFTStaking contract to update');
 		console.log('		0.0.CCC1,0.0.CCC2,0.0.CCC3 is the collections to add to the staking contract (comma separated - no spaces)');
 		console.log('		R1,R2,R3 is max reward rate per collection (comma separated - no spaces)');
-		console.log('		Example: addStakableCollection.js 0.0.12345 0.0.123,0.0.456,0.0.789 1,2,3');
+		console.log('		Example: updateStakableCollection.js 0.0.12345 0.0.123,0.0.456,0.0.789 1,2,3');
 		console.log('		Reward Rate in whole $LAZY that can be earned per period');
 		console.log('		This does not *ADD* collections, it *REPLACES* the current max reward rate *ONLY*');
 		return;
