@@ -165,7 +165,7 @@ const main = async () => {
 	);
 
 	console.log('\n-Base Reward Rate:', Number(baseRewardRate) / 10 ** lazyDecimals);
-	console.log('\n-Active Boost Rate:', Number(activeBoostRate) / 10 ** lazyDecimals);
+	console.log('\n-Active Boost Rate:', Number(activeBoostRate), '%');
 	console.log('\n-Lazy Earnt:', Number(rewards[0]) / 10 ** lazyDecimals);
 	console.log('\n-Total Reward Rate:', Number(rewards[1]) / 10 ** lazyDecimals);
 	console.log('\n-As Of:', Number(rewards[2]), `${new Date(Number(rewards[2]) * 1000).toISOString()}`);
@@ -173,8 +173,10 @@ const main = async () => {
 	// output stakedNFTs which is of type [address[] memory collections, uint256[][] memory serials]
 	let stakedNFTString = '';
 	for (let i = 0; i < stakedNFTs[0].length; i++) {
-		stakedNFTString += `Collection: ${TokenId.fromSolidityAddress(stakedNFTs[0][i]).toString()} [`;
-		stakedNFTString += `Serials: ${stakedNFTs[1][i].map(s => Number(s)).join(', ')}]\n`;
+		if (stakedNFTs[1][i].length != 0) {
+			stakedNFTString += `Collection: ${TokenId.fromSolidityAddress(stakedNFTs[0][i]).toString()} [`;
+			stakedNFTString += `Serials: ${stakedNFTs[1][i].map(s => Number(s)).join(', ')}]\n`;
+		}
 	}
 	console.log('\n-Staked NFTs:\n' + stakedNFTString);
 

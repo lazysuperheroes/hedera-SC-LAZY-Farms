@@ -74,8 +74,8 @@ const main = async () => {
 		'getStakingUsers',
 		result,
 	);
-	console.log('Raw:', users);
-	console.log('Users:', users[0].map((u) => AccountId.fromString(u).toString()).join(', '));
+
+	console.log('Users:', users[0].map((u) => AccountId.fromEvmAddress(0, 0, u).toString()).join(', '));
 
 };
 
