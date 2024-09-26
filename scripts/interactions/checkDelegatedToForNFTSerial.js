@@ -83,12 +83,12 @@ const main = async () => {
 		result,
 	);
 
-	console.log(`NFT ${serial} is delegated to: ${AccountId.fromEvmAddress(user[0]).toString()}`);
+	console.log(`NFT ${serial} is delegated to: ${AccountId.fromEvmAddress(0, 0, user[0]).toString()}`);
 
 	// use getNFTsDelegatedTo to get all NFTs delegated to a user
 	const encodedCommand1 = boostManagerIface.encodeFunctionData(
 		'getNFTsDelegatedTo',
-		[user],
+		[user[0]],
 	);
 
 	const result1 = await readOnlyEVMFromMirrorNode(
@@ -99,12 +99,13 @@ const main = async () => {
 		false,
 	);
 
+
 	const nfts = boostManagerIface.decodeFunctionResult(
 		'getNFTsDelegatedTo',
 		result1,
 	);
 
-	console.log(`NFTs delegated to ${AccountId.fromEvmAddress(user[0]).toString()}: ${nfts.map((n) => TokenId.fromSolidityAddress(n).toString()).join(', ')}`);
+	console.log(`NFTs delegated to ${AccountId.fromEvmAddress(0, 0, user[0]).toString()}: ${nfts[0].map((n) => TokenId.fromSolidityAddress(n).toString()).join(', ')}`);
 
 	// check totalSerialsDelegated
 	const encodedCommand2 = boostManagerIface.encodeFunctionData(
