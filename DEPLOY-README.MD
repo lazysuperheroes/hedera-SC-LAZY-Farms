@@ -57,6 +57,17 @@ Lazy Delegate Registry contract created with ID: 0.0.7221486 / 00000000000000000
 Lazy NFT Staking Contract created with ID: 0.0.7221488 / 00000000000000000000000000000000006e30f0
 Lazy NFT Staking added to Lazy Gas Station: 0.0.6284762@1727601288.693762511
 
+-Collection(s): 0.0.768753, 0.0.1693200, 0.0.1992037, 0.0.805923, 0.0.564539, 0.0.848553, 0.0.1195780, 0.0.838959
+-Token: 0.0.768753 Symbol: Lazy Superheroes - Gen 1 Name: Lazy Superheroes - Gen 1 Max Reward Rate: 100 LAZY
+-Token: 0.0.1693200 Symbol: LSHM Name: Lazy Superheroes - Gen 1 Mutants Max Reward Rate: 50 LAZY
+-Token: 0.0.1992037 Symbol: LSD Name: Lazy Super Dogs Max Reward Rate: 20 LAZY
+-Token: 0.0.805923 Symbol: HashHorses Name: Hash Horses Max Reward Rate: 20 LAZY
+-Token: 0.0.564539 Symbol: IPFS://bafkreie625ucklhyqwxqvopoc3aa6dmliji3xwagr3tfkziew3m2xdnd3i Name: Hash Horse #0 - Golden Horse - UR Max Reward Rate: 20 LAZY
+-Token: 0.0.848553 Symbol: Lazy Superheroes - Gen 2 Name: Lazy Superheroes - Gen 2 Max Reward Rate: 45 LAZY
+-Token: 0.0.1195780 Symbol: MOBS Name: The Mobsters Max Reward Rate: 0 LAZY
+-Token: 0.0.838959 Symbol: MEERK Name: Meerkat Gang Max Reward Rate: 0 LAZY
+Collections now stakeable. Transaction ID: 0.0.6284762@1727607005.390084793
+
 3) verify contracts with compiled code
 
 4) setup:
