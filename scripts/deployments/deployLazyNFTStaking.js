@@ -72,7 +72,7 @@ const main = async () => {
 	}
 	else if (env.toUpperCase() == 'MAIN') {
 		client = Client.forMainnet();
-		console.log('testing in *MAINNET*');
+		console.log('Deploying in *MAINNET* #liveAmmo');
 	}
 	else if (env.toUpperCase() == 'PREVIEW') {
 		client = Client.forPreviewnet();

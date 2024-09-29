@@ -12,16 +12,14 @@ const compat = new FlatCompat({
     allConfig: js.configs.all
 });
 
-export default [{
-    ignores: ["**/node_modules", "**/artifacts", "**/cache", "**/coverage"],
-}, ...compat.extends("eslint:recommended"), {
+export default [...compat.extends("eslint:recommended"), {
     languageOptions: {
         globals: {
             ...globals.node,
         },
 
         ecmaVersion: 2021,
-        sourceType: "commonjs",
+        sourceType: "module",
     },
 
     rules: {
