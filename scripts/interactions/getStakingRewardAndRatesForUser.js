@@ -47,9 +47,9 @@ const main = async () => {
 	const user = AccountId.fromString(args[1]);
 
 	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-	console.log('\n-Checking User:', user.toString());
+	console.log('-Using Operator:', operatorId.toString());
+	console.log('-Using Contract:', contractId.toString());
+	console.log('-Checking User:', user.toString());
 
 	// import ABI
 	const lnsJSON = JSON.parse(
@@ -165,11 +165,17 @@ const main = async () => {
 	);
 
 	console.log('\n-Base Reward Rate:', Number(baseRewardRate) / 10 ** lazyDecimals);
-	console.log('\n-Active Boost Rate:', Number(activeBoostRate), '%');
-	console.log('\n-Lazy Earnt:', Number(rewards[0]) / 10 ** lazyDecimals);
-	console.log('\n-Total Reward Rate:', Number(rewards[1]) / 10 ** lazyDecimals);
-	console.log('\n-As Of:', Number(rewards[2]), `${new Date(Number(rewards[2]) * 1000).toISOString()}`);
-	console.log('\n-Last Claim:', Number(rewards[3]), `${new Date(Number(rewards[3]) * 1000).toISOString()}`);
+	console.log('-Active Boost Rate:', Number(activeBoostRate), '%');
+	console.log('-Lazy Earnt:', Number(rewards[0]) / 10 ** lazyDecimals);
+	console.log('-Total Reward Rate:', Number(rewards[1]) / 10 ** lazyDecimals);
+	console.log('-As Of:', Number(rewards[2]), `${new Date(Number(rewards[2]) * 1000).toISOString()}`);
+	// work out the time until next claim (in hours / minutes / seconds) as 24 hours from the as of time
+	const timeUntilNextClaim = 24 * 60 * 60 - (Date.now() / 1000 - Number(rewards[2]));
+	const hours = Math.floor(timeUntilNextClaim / 3600);
+	const minutes = Math.floor((timeUntilNextClaim % 3600) / 60);
+	const seconds = Math.floor(timeUntilNextClaim % 60);
+	console.log('-Time Until Next Claim:', `${hours} hours, ${minutes} minutes, ${seconds} seconds`);
+	console.log('-Last Claim:', Number(rewards[3]), `${new Date(Number(rewards[3]) * 1000).toISOString()}`);
 	// output stakedNFTs which is of type [address[] memory collections, uint256[][] memory serials]
 	let stakedNFTString = '';
 	for (let i = 0; i < stakedNFTs[0].length; i++) {

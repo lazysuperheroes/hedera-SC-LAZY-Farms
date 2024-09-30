@@ -63,20 +63,20 @@ const main = async () => {
 	}
 
 	// import ABI
-	const boostManagerJSON = JSON.parse(
+	const ldrJSON = JSON.parse(
 		fs.readFileSync(
 			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
 		),
 	);
 
-	const boostManagerIface = new ethers.Interface(boostManagerJSON.abi);
+	const ldrIface = new ethers.Interface(ldrJSON.abi);
 
 	const tokentoSerialUserMap = new Map();
 
 	for (const wallet of walletList) {
 
 		// query the EVM via mirror node (readOnlyEVMFromMirrorNode)
-		const encodedCommand = boostManagerIface.encodeFunctionData(
+		const encodedCommand = ldrIface.encodeFunctionData(
 			'getNFTsDelegatedTo',
 			[wallet.toSolidityAddress()],
 		);
@@ -89,7 +89,7 @@ const main = async () => {
 			false,
 		);
 
-		const tokensAndSerials = boostManagerIface.decodeFunctionResult(
+		const tokensAndSerials = ldrIface.decodeFunctionResult(
 			'getNFTsDelegatedTo',
 			result,
 		);
