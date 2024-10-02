@@ -16,7 +16,7 @@ try {
 	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 }
 catch (err) {
-	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
+	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file', err);
 }
 
 const contractName = 'LazyNFTStaking';
@@ -180,7 +180,9 @@ const main = async () => {
 	let stakedNFTString = '';
 	for (let i = 0; i < stakedNFTs[0].length; i++) {
 		if (stakedNFTs[1][i].length != 0) {
-			stakedNFTString += `Collection: ${TokenId.fromSolidityAddress(stakedNFTs[0][i]).toString()} [`;
+			// get TokenDetails from the mirror node
+			const tokenDetails = await getTokenDetails(env, TokenId.fromSolidityAddress(stakedNFTs[0][i]));
+			stakedNFTString += `Collection: ${TokenId.fromSolidityAddress(stakedNFTs[0][i]).toString()} - ${tokenDetails.name} [`;
 			stakedNFTString += `Serials: ${stakedNFTs[1][i].map(s => Number(s)).join(', ')}]\n`;
 		}
 	}
