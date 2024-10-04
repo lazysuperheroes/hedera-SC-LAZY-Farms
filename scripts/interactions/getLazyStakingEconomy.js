@@ -171,9 +171,9 @@ const main = async () => {
 			`Lazy (Current Rate: ${Number(rewards[1]) / 10 ** lazyDecimals}/day)`,
 			`Base Rate: ${Number(baseRate) / 10 ** lazyDecimals}/day`,
 			`Active Boost Rate: ${Number(activeBoostRate)}%`,
-			`as of ${new Date(Number(rewards[2])).toUTCString()}`,
+			`as of ${new Date(Number(rewards[2]) * 1000).toUTCString()}`,
 			rewards[3]
-				? `Last Claim ${new Date(Number(rewards[3])).toUTCString()}`
+				? `Last Claim ${new Date(Number(rewards[3]) * 1000).toUTCString()}`
 				: '',
 		);
 	}
