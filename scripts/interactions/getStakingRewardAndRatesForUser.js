@@ -157,6 +157,7 @@ const main = async () => {
 		encodedCommand4,
 		operatorId,
 		false,
+		2_000_000,
 	);
 
 	const stakedNFTs = lnsIface.decodeFunctionResult(
