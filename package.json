@@ -45,6 +45,7 @@
       "typescript": ">=4.5.0"
    },
    "dependencies": {
+      "@directus/sdk": "^15",
       "@hashgraph/sdk": "^2.18.3",
       "@openzeppelin/contracts": "^4.6.0",
       "abi-decoder": "^2.4.0",
