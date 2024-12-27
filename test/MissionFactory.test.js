@@ -6,9 +6,7 @@ const {
 	Client,
 	AccountId,
 	PrivateKey,
-	// eslint-disable-next-line no-unused-vars
 	TokenId,
-	// eslint-disable-next-line no-unused-vars
 	ContractId,
 	ContractFunctionParameters,
 	Hbar,
@@ -47,7 +45,7 @@ try {
 	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
 	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
 }
 const contractName = 'MissionFactory';
@@ -1386,7 +1384,7 @@ describe('Deployment', () => {
 				console.log('Unexpected Result: (update prng)', result);
 			}
 		}
-		catch (e) {
+		catch {
 			otherErrorCount++;
 		}
 		console.log('expectedErrorCount:', expectedErrorCount);
@@ -4991,7 +4989,7 @@ describe('Join Missions', () => {
 			);
 			expect(bobResult[0]?.status?.name).to.be.equal('PermissionDenied');
 		}
-		catch (e) {
+		catch {
 			fail('Bob should not get to pull Lazy');
 		}
 

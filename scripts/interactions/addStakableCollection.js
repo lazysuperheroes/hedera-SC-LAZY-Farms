@@ -21,7 +21,7 @@ try {
 	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 }
 catch (err) {
-	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
+	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file', err);
 }
 
 const LAZY_TOKEN = process.env.LAZY_TOKEN_ID;
