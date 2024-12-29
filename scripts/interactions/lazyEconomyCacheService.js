@@ -2,7 +2,6 @@ const {
 	ContractId,
 	AccountId,
 	TokenId,
-	Client,
 } = require('@hashgraph/sdk');
 require('dotenv').config();
 const { ethers } = require('ethers');
@@ -12,11 +11,19 @@ const { createDirectus, rest, readItems, staticToken, updateItem, createItem } =
 let operatorId = process.env.ACCOUNT_ID ?? '0.0.888';
 let env = process.env.LAZY_STAKING_ENV ?? null;
 const cacheTable = process.env.LAZY_STAKING_CACHE_TABLE ?? 'LazyEconomyCache';
+const timeseriesTable = process.env.LAZY_STAKING_TIMESERIES_TABLE ?? 'LazyEconomyTimeseries';
 const client = createDirectus(process.env.DIRECTUS_DB_URL).with(rest());
 const writeClient = createDirectus(process.env.DIRECTUS_DB_URL).with(staticToken(process.env.DIRECTUS_TOKEN)).with(rest());
 const supressLogs = process.env.STAKING_CACHE_SUPRESS_LOGS === '1' || process.env.STAKING_CACHE_SUPRESS_LOGS === 'true';
+const lgsId = process.env.LAZY_GAS_STATION_ID ?? '0.0.7221483';
+const lsctId = process.env.LAZY_SMART_CONTRACT_TREASURY ?? '0.0.1311003';
+const treasuryId = process.env.TREASURY_ID ?? '0.0.499869';
+const mintId = process.env.MINT_ID ?? '0.0.697777';
+const gen1SalesId = process.env.GEN1_SALES_ID ?? '0.0.662623';
+const lsvGen2SalesId = process.env.LSV_GEN2_SALES_ID ?? '0.0.659099';
+const gen2RaffleId = process.env.GEN2_RAFFLE_ID ?? '0.0.658725';
+const gen1RoyaltyId = process.env.GEN1_ROYALTY_ID ?? '0.0.841300';
 
-let hederaClient;
 let lazyStakingContract;
 const evmToHederaAccountMap = new Map();
 
@@ -25,13 +32,81 @@ const TYPES = {
 	HIGHEST_DAILY_RATE: 'HIGHEST_DAILY_RATE',
 	LARGEST_BOOST: 'LARGEST_BOOST',
 	LARGEST_UNCLAIMED: 'LARGEST_UNCLAIMED',
+	MOST_CLAIMED: 'MOST_CLAIMED',
 };
 
+class lazyEconomyTimeSeries {
+	constructor(burntSupply, ciculatingSupply, currentStakers, collectionsStaked = [], claimableLazy, lazyClaimed, nftsStaked, sctLazy, lgsLazy, treasuryLazy, mintLazy, gen1SalesHbar, lsvGen2SalesHbar, gen2RaffleHbar, gen1RoyaltyShare) {
+		this.burntSupply = burntSupply;
+		this.circulatingSupply = ciculatingSupply;
+		this.currentStakers = currentStakers;
+		this.collectionsStaked = collectionsStaked;
+		this.claimableLazy = claimableLazy;
+		this.lazyClaimed = lazyClaimed;
+		this.nftsStaked = nftsStaked;
+		this.sctLazy = sctLazy;
+		this.lgsLazy = lgsLazy;
+		this.treasuryLazy = treasuryLazy;
+		this.mintLazy = mintLazy;
+		this.gen1SalesHbar = gen1SalesHbar;
+		this.lsvGen2SalesHbar = lsvGen2SalesHbar;
+		this.gen2RaffleHbar = gen2RaffleHbar;
+		this.gen1RoyaltyShare = gen1RoyaltyShare;
+	}
+
+	async toJSON() {
+		return {
+			burntSupply: this.burntSupply,
+			circulatingSupply: this.circulatingSupply,
+			currentStakers: this.currentStakers,
+			collectionsStaked: this.getCollectionsAsJSON,
+			claimableLazy: this.claimableLazy,
+			lazyClaimed: this.lazyClaimed,
+			nftsStaked: this.nftsStaked,
+			sctLazy: this.sctLazy,
+			lgsLazy: this.lgsLazy,
+			treasuryLazy: this.treasuryLazy,
+			mintLazy: this.mintLazy,
+			gen1SalesHbar: this.gen1SalesHbar,
+			lsvGen2SalesHbar: this.lsvGen2SalesHbar,
+			gen2RaffleHbar: this.gen2RaffleHbar,
+			gen1RoyaltyShare: this.gen1RoyaltyShare,
+		};
+	}
+
+	getCollectionsAsJSON() {
+		return this.collectionsStaked.map(collection => collection.toJSON());
+	}
+
+	async toString() {
+		let rtnVal = `Burnt Supply: ${this.burntSupply}\n`;
+		rtnVal += `Ciculating Supply: ${this.circulatingSupply}\n`;
+		rtnVal += `Current Stakers: ${this.currentStakers}\n`;
+		rtnVal += `Claimable Lazy: ${this.claimableLazy}\n`;
+		rtnVal += `$LAZY Claimed: ${this.lazyClaimed}\n`;
+		rtnVal += `NFTs Staked: ${this.nftsStaked}\n`;
+		rtnVal += `SCT $LAZY: ${this.sctLazy}\n`;
+		rtnVal += `LGS $LAZY: ${this.lgsLazy}\n`;
+		rtnVal += `Treasury $LAZY: ${this.treasuryLazy}\n`;
+		rtnVal += `Mint $LAZY: ${this.mintLazy}\n`;
+		rtnVal += `Gen1 Sales Hbar: ${this.gen1SalesHbar}\n`;
+		rtnVal += `LSV Gen2 Sales Hbar: ${this.lsvGen2SalesHbar}\n`;
+		rtnVal += `Gen2 Raffle Hbar: ${this.gen2RaffleHbar}\n`;
+		rtnVal += `Gen1 Royalty Share: ${this.gen1RoyaltyShare}\n`;
+		for (const collection of this.collectionsStaked) {
+			rtnVal += collection.toString() + '\n';
+		}
+
+		return rtnVal;
+	}
+}
+
 class lazyEconomyCache {
-	constructor(stakingUsers, totalItemsStaked, totalLazyEarned, totalEarnRate, collections = [], top25s = []) {
+	constructor(stakingUsers, totalItemsStaked, totalLazyEarned, totalLazyClaimed, totalEarnRate, collections = [], top25s = []) {
 		this.stakingUsers = stakingUsers;
 		this.totalItemsStaked = totalItemsStaked;
 		this.totalLazyEarned = totalLazyEarned;
+		this.totalLazyClaimed = totalLazyClaimed;
 		this.totalEarnRate = totalEarnRate;
 		this.collections = collections;
 		this.top25s = top25s;
@@ -60,6 +135,7 @@ class lazyEconomyCache {
 			stakingUsers: this.stakingUsers,
 			totalItemsStaked: this.totalItemsStaked,
 			totalLazyEarned: this.totalLazyEarned,
+			totalLazyClaimed: this.totalLazyClaimed,
 			totalEarnRate: this.totalEarnRate,
 			collections: this.getCollectionsAsJSON(),
 			top25s: await this.getTop25sAsJSON(),
@@ -77,6 +153,7 @@ class lazyEconomyCache {
 	async toString() {
 		let rtnVal = `Total Items Staked: ${this.totalItemsStaked}\n`;
 		rtnVal += `Total Lazy Earned: ${this.totalLazyEarned}\n`;
+		rtnVal += `Total Lazy Claimed: ${this.totalLazyClaimed}\n`;
 		rtnVal += `Total Earn Rate: ${this.totalEarnRate}\n`;
 
 		this.collections.forEach(collection => {
@@ -126,7 +203,15 @@ class top25User {
 	}
 
 	addUser(user, amount) {
-		this.userList.push({ user, amount });
+		if (this.userList.includes(user)) {
+			// update the amount
+			const userIndex = this.userList.findIndex(u => u.user == user);
+			this.userList[userIndex].amount += amount;
+			return;
+		}
+		else {
+			this.userList.push({ user, amount });
+		}
 		this.parsed = false;
 	}
 
@@ -151,8 +236,9 @@ class top25User {
 				}
 				else {
 					// convert the user to an AccountId
-					const parsedUser = (await AccountId.fromString(user.user).populateAccountNum(hederaClient));
-					const translatedUser = `${parsedUser.shard}.${parsedUser.realm}.${parsedUser.num}`;
+					if (!supressLogs) console.log('INFO: Translating EVM address:', user.user);
+					const translatedUser = await homebrewPopulateAccountNum(user.user);
+					if (!supressLogs) console.log('INFO: Got:', translatedUser, 'for EVM address:', user.user);
 					evmToHederaAccountMap.set(user.user, translatedUser);
 					user.user = translatedUser;
 				}
@@ -195,24 +281,19 @@ class top25User {
 const main = async () => {
 
 	if (env.toUpperCase() == 'TEST' || env.toUpperCase() == 'TESTNET') {
-		hederaClient = Client.forTestnet();
 		env = 'testnet';
 		console.log('testing in *TESTNET*');
 	}
 	else if (env.toUpperCase() == 'MAIN' || env.toUpperCase() == 'MAINNET') {
-		hederaClient = Client.forMainnet();
 		env = 'mainnet';
 		console.log('Processing in *MAINNET*');
 	}
 	else if (env.toUpperCase() == 'PREVIEW' || env.toUpperCase() == 'PREVIEWNET') {
-		hederaClient = Client.forPreviewnet();
 		env = 'previewnet';
 		console.log('testing in *PREVIEWNET*');
 	}
 	else if (env.toUpperCase() == 'LOCAL' || env.toUpperCase() == 'LOCALHOST') {
 		env = 'local';
-		const node = { '127.0.0.1:50211': new AccountId(3) };
-		hederaClient = Client.forNetwork(node).setMirrorNetwork('127.0.0.1:5600');
 		console.log('testing in *LOCAL*');
 	}
 	else {
@@ -265,6 +346,7 @@ const main = async () => {
 			'function getActiveBoostRate(address) view returns (uint256)',
 			'function getStakableCollections() view returns (address[] collections)',
 			'function getNumStakedNFTs(address) view returns (uint256)',
+			'event ClaimedRewards(address _user, uint256 _rewardAmount, uint256 _burnPercentage)',
 		],
 	);
 
@@ -324,6 +406,7 @@ const main = async () => {
 		new top25User(TYPES.HIGHEST_DAILY_RATE),
 		new top25User(TYPES.LARGEST_BOOST),
 		new top25User(TYPES.LARGEST_UNCLAIMED),
+		new top25User(TYPES.MOST_CLAIMED),
 	];
 
 	const currentTimestamp = Math.floor(Date.now() / 1000);
@@ -396,7 +479,33 @@ const main = async () => {
 		}
 	}
 
-	const lazyEconomyCacheObj = new lazyEconomyCache(users[0].length, Number(totalItemsStaked[0]), totalLazyEarned / 10 ** lazyDecimals, totalEarnRate / 10 ** lazyDecimals);
+	console.log('INFO: Looking up staking events');
+	// get the claimed events
+	const lazyClaimedEvents = await getLazyClaimedViaEventsFromMirror(contractId, lscIface);
+
+	if (!supressLogs) console.log('INFO: Total claimed events:', lazyClaimedEvents.length);
+
+	let totalLazyClaimed = 0;
+	// convert to a map of user to total claimed
+	const userToClaimed = new Map();
+	lazyClaimedEvents.forEach(event => {
+		const user = event.user;
+		const rewardAmount = Number(event.rewardAmount) / 10 ** lazyDecimals;
+
+		top25s[4].addUser(user, rewardAmount);
+
+		totalLazyClaimed += rewardAmount;
+
+		const userTotalClaimed = userToClaimed.get(user) ?? 0;
+		userToClaimed.set(user, userTotalClaimed + rewardAmount);
+	});
+
+	if (!supressLogs) {
+		console.log('INFO: Total users:', userToClaimed.size);
+		console.log('INFO: Total Lazy Claimed:', totalLazyClaimed / 10 ** lazyDecimals);
+	}
+
+	const lazyEconomyCacheObj = new lazyEconomyCache(users[0].length, Number(totalItemsStaked[0]), totalLazyEarned / 10 ** lazyDecimals, totalLazyClaimed / 10 ** lazyDecimals, totalEarnRate / 10 ** lazyDecimals);
 
 	top25s.forEach(top25 => {
 		lazyEconomyCacheObj.addTop25(top25);
@@ -466,7 +575,87 @@ const main = async () => {
 	if (!supressLogs) {
 		console.log(console.dir(outputAsJSON, { depth: 5 }));
 	}
+
+	// gather the rest of the data for the timeseries
+	const lgsLazy = await checkMirrorBalance(lgsId, lazyToken) / 10 ** lazyDecimals;
+	const sctLazy = await checkMirrorBalance(lsctId, lazyToken) / 10 ** lazyDecimals;
+	const treasuryLazy = await checkMirrorBalance(treasuryId, lazyToken) / 10 ** lazyDecimals;
+	const mintLazy = await checkMirrorBalance(mintId, lazyToken) / 10 ** lazyDecimals;
+
+	const gen1SalesHbar = await checkMirrorHbarBalance(gen1SalesId);
+	const lsvGen2SalesHbar = await checkMirrorHbarBalance(lsvGen2SalesId);
+	const gen2RaffleHbar = await checkMirrorHbarBalance(gen2RaffleId);
+	const gen1RoyaltyShare = await checkMirrorHbarBalance(gen1RoyaltyId);
+
+	console.log('INFO: LGS $LAZY:', lgsLazy);
+	console.log('INFO: SCT $LAZY:', sctLazy);
+	console.log('INFO: Treasury $LAZY:', treasuryLazy);
+	console.log('INFO: Mint $LAZY:', mintLazy);
+	console.log('INFO: Gen1 Sales Hbar:', gen1SalesHbar);
+	console.log('INFO: LSV Gen2 Sales Hbar:', lsvGen2SalesHbar);
+	console.log('INFO: Gen2 Raffle Hbar:', gen2RaffleHbar);
+	console.log('INFO: Gen1 Royalty Share:', gen1RoyaltyShare);
+
+	console.log('INFO: $LAZY Token Details:', lazyTokenDetails);
+
+	lazyTokenDetails.max_supply = Number(lazyTokenDetails.max_supply) / 10 ** lazyDecimals;
+	lazyTokenDetails.total_supply = Number(lazyTokenDetails.total_supply) / 10 ** lazyDecimals;
+
+	console.log('Max Supply:', lazyTokenDetails.max_supply);
+	console.log('Total Supply:', lazyTokenDetails.total_supply);
+
+	const burntLazy = lazyTokenDetails.max_supply - lazyTokenDetails.total_supply;
+	const ciculatingSupply = lazyTokenDetails.total_supply - lgsLazy - sctLazy;
+
+	console.log('Burnt Supply:', burntLazy);
+	console.log('Circulating Supply:', ciculatingSupply);
+
+	const timeseries = new lazyEconomyTimeSeries(
+		burntLazy,
+		ciculatingSupply,
+		lazyEconomyCacheObj.stakingUsers,
+		lazyEconomyCacheObj.collections,
+		lazyEconomyCacheObj.totalLazyEarned,
+		lazyEconomyCacheObj.totalLazyClaimed,
+		lazyEconomyCacheObj.totalItemsStaked,
+		sctLazy,
+		lgsLazy,
+		treasuryLazy,
+		mintLazy,
+		gen1SalesHbar,
+		lsvGen2SalesHbar,
+		gen2RaffleHbar,
+		gen1RoyaltyShare);
+
+	await postTimeseriesToDirectus(timeseries);
 };
+
+async function postTimeseriesToDirectus(lazyEconomyTimeSeriesObj) {
+	try {
+		await writeClient.request(createItem(timeseriesTable, {
+			environment: env,
+			snapshotDate: new Date(),
+			burntSupply: lazyEconomyTimeSeriesObj.burntSupply,
+			circulatingSupply: lazyEconomyTimeSeriesObj.circulatingSupply,
+			currentStakers: lazyEconomyTimeSeriesObj.currentStakers,
+			collectionsStaked: lazyEconomyTimeSeriesObj.getCollectionsAsJSON(),
+			claimableLazy: lazyEconomyTimeSeriesObj.claimableLazy,
+			lazyClaimed: lazyEconomyTimeSeriesObj.lazyClaimed,
+			nftsStaked: lazyEconomyTimeSeriesObj.nftsStaked,
+			sctLazy: lazyEconomyTimeSeriesObj.sctLazy,
+			lgsLazy: lazyEconomyTimeSeriesObj.lgsLazy,
+			treasuryLazy: lazyEconomyTimeSeriesObj.treasuryLazy,
+			mintLazy: lazyEconomyTimeSeriesObj.mintLazy,
+			gen1SalesHbar: lazyEconomyTimeSeriesObj.gen1SalesHbar,
+			lsvGen2SalesHbar: lazyEconomyTimeSeriesObj.lsvGen2SalesHbar,
+			gen2RaffleHbar: lazyEconomyTimeSeriesObj.gen2RaffleHbar,
+			gen1RoyaltyShare: lazyEconomyTimeSeriesObj.gen1RoyaltyShare,
+		}));
+	}
+	catch (error) {
+		console.error(error);
+	}
+}
 
 async function postLastestEconomyToDirectus(lazyEconomyCacheObj) {
 	const response = await client.request(readItems(cacheTable, {
@@ -508,13 +697,12 @@ async function postLastestEconomyToDirectus(lazyEconomyCacheObj) {
 
 /**
  * Get the token decimal form mirror
- * @param {string} env
  * @param {TokenId|string} _tokenId
  * @returns {Object} details of the token
  */
 async function getTokenDetails(_tokenId) {
 	const tokenAsString = typeof _tokenId === 'string' ? _tokenId : _tokenId.toString();
-	const baseUrl = getBaseURL(env);
+	const baseUrl = getBaseURL();
 	const url = `${baseUrl}/api/v1/tokens/${tokenAsString}`;
 	let rtnVal = null;
 	await axios.get(url)
@@ -524,6 +712,7 @@ async function getTokenDetails(_tokenId) {
 				symbol: jsonResponse.symbol,
 				name: jsonResponse.name,
 				decimals: jsonResponse.decimals,
+				max_supply: jsonResponse.max_supply,
 				total_supply: jsonResponse.total_supply,
 				treasury_account_id: jsonResponse.treasury_account_id,
 				type: jsonResponse.type,
@@ -538,7 +727,6 @@ async function getTokenDetails(_tokenId) {
 }
 
 /**
- * @param {String} env
  * @param {ContractId} contractId
  * @param {String} data command and parameters encoded as a string
  * @param {AccountId | string} from
@@ -575,6 +763,111 @@ async function readOnlyEVMFromMirrorNode(contractId, data, from, estimate = true
 	const response = await axios.post(url, body);
 
 	return response.data?.result;
+}
+
+async function getLazyClaimedViaEventsFromMirror(contractId, iface) {
+	const baseUrl = getBaseURL();
+
+	let url = `${baseUrl}/api/v1/contracts/${contractId.toString()}/results/logs?order=asc&limit=100`;
+	if (!supressLogs) console.log('INFO: Fetching logs from:', url);
+
+	const claimEvents = [];
+
+	do {
+		const response = await axios.get(url);
+		const jsonResponse = response.data;
+		jsonResponse.logs.forEach(log => {
+			// decode the event data
+			if (log.data == '0x') return;
+
+			const event = iface.parseLog({ topics: log.topics, data: log.data });
+			if (!event) return;
+
+			/**
+			 * event ClaimedRewards(
+					address _user,
+					uint256 _rewardAmount,
+					uint256 _burnPercentage
+				);
+			 */
+
+			switch (event.name) {
+			case 'ClaimedRewards':
+				claimEvents.push({ user: event.args._user, rewardAmount: Number(event.args._rewardAmount), burnPercentage: Number(event.args._burnPercentage) });
+				break;
+			default:
+				break;
+			}
+		});
+
+		if (!jsonResponse.links.next) {
+			break;
+		}
+		url = `${baseUrl}${jsonResponse.links.next}`;
+		if (!supressLogs) console.log('INFO: Fetching logs from:', url);
+	}
+	while (url);
+
+	return claimEvents;
+}
+
+/**
+ * Basic query of mirror node for token balance
+ * @param {AccountId} _userId
+ * @param {TokenId} _tokenId
+ * @returns {Number} balance of the token
+ */
+async function checkMirrorBalance(_userId, _tokenId) {
+	const baseUrl = getBaseURL();
+	const url = `${baseUrl}/api/v1/accounts/${_userId.toString()}/tokens?token.id=${_tokenId.toString()}`;
+
+	let rtnVal = null;
+	await axios.get(url)
+		.then((response) => {
+			const jsonResponse = response.data;
+
+			jsonResponse.tokens.forEach(token => {
+				if (token.token_id == _tokenId.toString()) {
+					// console.log(' -Mirror Node: Found balance for', _userId.toString(), 'of', token.balance, 'of token', token.token_id);
+					rtnVal = Number(token.balance);
+				}
+			});
+		})
+		.catch(function(err) {
+			console.error(err);
+			return null;
+		});
+
+	return rtnVal;
+}
+
+async function checkMirrorHbarBalance(_userId) {
+	const baseUrl = getBaseURL();
+	const url = `${baseUrl}/api/v1/accounts/${_userId.toString()}`;
+
+	let rtnVal = null;
+	await axios.get(url)
+		.then((response) => {
+			const jsonResponse = response.data;
+			rtnVal = Number(jsonResponse.balance.balance) / 10 ** 8;
+		})
+		.catch(function(err) {
+			console.error(err);
+			return null;
+		});
+
+	return rtnVal;
+}
+
+async function homebrewPopulateAccountNum(evmAddress) {
+	if (evmAddress === null) {
+		throw new Error('field `evmAddress` should not be null');
+	  }
+
+	  const mirrorUrl = getBaseURL();
+
+	  const url = `${mirrorUrl}/api/v1/accounts/${evmAddress}`;
+	  return (await axios.get(url)).data.account;
 }
 
 function getBaseURL() {

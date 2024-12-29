@@ -355,6 +355,7 @@ async function getTokenDetails(env, _tokenId) {
 				name: jsonResponse.name,
 				decimals: jsonResponse.decimals,
 				total_supply: jsonResponse.total_supply,
+				max_supply: jsonResponse.max_supply,
 				treasury_account_id: jsonResponse.treasury_account_id,
 				type: jsonResponse.type,
 			};
