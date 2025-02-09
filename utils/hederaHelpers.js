@@ -52,7 +52,6 @@ async function accountCreator(
  * @param {number} decimal
  * @returns {[string, TokenId]} status and token ID object
  */
-// eslint-disable-next-line no-unused-vars
 async function mintFT(
 	client,
 	acct,
@@ -213,10 +212,10 @@ async function setNFTAllowanceAll(client, _tokenIdList, _ownerId, _spenderId) {
 				_spenderId,
 			);
 		}
-		approvalTx.setTransactionMemo(
+		await approvalTx.setTransactionMemo(
 			`NFT  (all serials) allowance (batch ${batch++})`,
 		);
-		approvalTx.freezeWith(client);
+		await approvalTx.freezeWith(client);
 		const exResp = await approvalTx.execute(client);
 		const receipt = await exResp.getReceipt(client).catch((e) => {
 			console.log(e);
@@ -270,10 +269,10 @@ async function clearNFTAllowances(client, _allowanceList) {
 				].spender.toString()}`,
 			);
 		}
-		approvalTx.setTransactionMemo(
+		await approvalTx.setTransactionMemo(
 			`NFT  (all serials) allowance deletion (batch ${batch++})`,
 		);
-		approvalTx.freezeWith(client);
+		await approvalTx.freezeWith(client);
 		const exResp = await approvalTx.execute(client);
 		const receipt = await exResp.getReceipt(client).catch((e) => {
 			console.log(e);
@@ -346,8 +345,8 @@ async function clearFTAllowances(client, _allowanceList) {
 				].spender.toString()}`,
 			);
 		}
-		approvalTx.setTransactionMemo(`FT allowance reset (batch ${batch++})`);
-		approvalTx.freezeWith(client);
+		await approvalTx.setTransactionMemo(`FT allowance reset (batch ${batch++})`);
+		await approvalTx.freezeWith(client);
 		const exResp = await approvalTx.execute(client);
 		const receipt = await exResp.getReceipt(client).catch((e) => {
 			console.log(e);
@@ -389,8 +388,8 @@ async function clearHbarAllowances(client, _allowanceList) {
 				new Hbar(0, HbarUnit.Tinybar),
 			);
 		}
-		approvalTx.setTransactionMemo(`Hbar allowance reset (batch ${batch++})`);
-		approvalTx.freezeWith(client);
+		await approvalTx.setTransactionMemo(`Hbar allowance reset (batch ${batch++})`);
+		await approvalTx.freezeWith(client);
 		const exResp = await approvalTx.execute(client);
 		const receipt = await exResp.getReceipt(client).catch((e) => {
 			console.log(e);
@@ -731,6 +730,34 @@ async function sweepHbar(client, sourceId, sourcePK, targetId, amount) {
 	return transferRx.status.toString();
 }
 
+/**
+ * @param {Client} client
+ * @param {AccountId | string} owner
+ * @param {NftId[]} tokens
+ * @param {AccountId | string} spender
+ */
+async function revokeAllSerialNFTAllowances(client, owner, tokens, spender) {
+	// split tokens into batches of 20
+	const batchSize = 20;
+	const batches = [];
+
+	for (let i = 0; i < tokens.length; i += batchSize) {
+		batches.push(tokens.slice(i, i + batchSize));
+	}
+
+	for (const batch of batches) {
+		const revokeTx = new AccountAllowanceApproveTransaction();
+		for (const token of batch) {
+			console.log('Revoking all allowances for', token.toString(), 'to Spender:', spender);
+			revokeTx.deleteTokenNftAllowanceAllSerials(token, owner, spender);
+		}
+
+		const txResponse = await revokeTx.execute(client);
+		const receipt = await txResponse.getReceipt(client);
+		console.log('Receipt:', receipt.status.toString(), 'Tx Id:', txResponse.transactionId.toString());
+	}
+}
+
 module.exports = {
 	accountCreator,
 	mintFT,
@@ -751,4 +778,5 @@ module.exports = {
 	clearFTAllowances,
 	clearHbarAllowances,
 	sweepHbar,
+	revokeAllSerialNFTAllowances,
 };

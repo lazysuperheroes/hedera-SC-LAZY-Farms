@@ -742,7 +742,7 @@ describe('Deployment', () => {
 		}
 
 		// check the GasStationAccessControlEvent on the mirror node
-		await sleep(6000);
+		await sleep(7500);
 		const lgsEvent = await checkLastMirrorEvent(
 			env,
 			lazyGasStationId,
@@ -2018,7 +2018,7 @@ describe('Deployment', () => {
 		}
 
 		// check the event was emitted to the mirrors
-		await sleep(6000);
+		await sleep(7500);
 		const mirrorEvent = await checkLastMirrorEvent(
 			env,
 			lazyGasStationId,
@@ -2205,7 +2205,7 @@ describe('Launch Missions', () => {
 			}
 			const missionContract = ContractId.fromEvmAddress(0, 0, contractResults[0]);
 			// wait for the contract to be created and populated to mirrors
-			await sleep(6000);
+			await sleep(7500);
 			missionA = await missionContract.populateAccountNum(client);
 		}
 		catch (e) {
@@ -2233,7 +2233,7 @@ describe('Launch Missions', () => {
 		operatorNftAllowances.push({ tokenId: RewardA_TokenId, owner: operatorId, spender: AccountId.fromString(`0.0.${missionA.num}`) });
 
 		// check the LGS for a GasStationAccessControlEvent on the mirror nodes
-		await sleep(6000);
+		await sleep(7500);
 		const lgsEvent = await checkLastMirrorEvent(
 			env,
 			lazyGasStationId,
@@ -2281,7 +2281,7 @@ describe('Launch Missions', () => {
 
 		expect(Number(slots[0])).to.be.equal(3);
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// check mirror node for Event publish at Mission level
 		let mirrorSlots = await checkLastMirrorEvent(
@@ -2702,7 +2702,7 @@ describe('Launch Missions', () => {
 		try {
 			const missionContract = ContractId.fromEvmAddress(0, 0, contractResults[0]);
 			// wait for the contract to be created and populated to mirrors
-			await sleep(6000);
+			await sleep(7500);
 			missionB = await missionContract.populateAccountNum(client);
 		}
 		catch (e) {
@@ -2768,7 +2768,7 @@ describe('Launch Missions', () => {
 
 		expect(Number(slots[0])).to.be.equal(2);
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// check mirror node for Event publish at Mission level
 		let mirrorSlots = await checkLastMirrorEvent(
@@ -2822,7 +2822,7 @@ describe('Launch Missions', () => {
 		try {
 			const missionContract = ContractId.fromEvmAddress(0, 0, contractResults[0]);
 			// wait for the contract to be created and populated to mirrors
-			await sleep(6000);
+			await sleep(7500);
 			missionC = await missionContract.populateAccountNum(client);
 		}
 		catch (e) {
@@ -2879,7 +2879,7 @@ describe('Launch Missions', () => {
 
 		expect(Number(slots[0])).to.be.equal(3);
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// check mirror node for Event publish at Mission level
 		let mirrorSlots = await checkLastMirrorEvent(
@@ -2933,7 +2933,7 @@ describe('Launch Missions', () => {
 		try {
 			const missionContract = ContractId.fromEvmAddress(0, 0, contractResults[0]);
 			// wait for the contract to be created and populated to mirrors
-			await sleep(6000);
+			await sleep(7500);
 			missionD = await missionContract.populateAccountNum(client);
 		}
 		catch (e) {
@@ -2989,7 +2989,7 @@ describe('Launch Missions', () => {
 
 		expect(Number(slots[0])).to.be.equal(3);
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// check mirror node for Event publish at Mission level
 		let mirrorSlots = await checkLastMirrorEvent(
@@ -3044,7 +3044,7 @@ describe('Launch Missions', () => {
 		try {
 			const missionContract = ContractId.fromEvmAddress(0, 0, contractResults[0]);
 			// wait for the contract to be created and populated to mirrors
-			await sleep(6000);
+			await sleep(7500);
 			missionE = await missionContract.populateAccountNum(client);
 		}
 		catch (e) {
@@ -3089,7 +3089,7 @@ describe('Launch Missions', () => {
 
 		expect(Number(slots[0])).to.be.equal(3);
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// check mirror node for Event publish at Mission level
 		let mirrorSlots = await checkLastMirrorEvent(
@@ -3147,7 +3147,7 @@ describe('Launch Missions', () => {
 		try {
 			const missionContract = ContractId.fromEvmAddress(0, 0, contractResults[0]);
 			// wait for the contract to be created and populated to mirrors
-			await sleep(6000);
+			await sleep(7500);
 			missionF = await missionContract.populateAccountNum(client);
 		}
 		catch (e) {
@@ -3203,7 +3203,7 @@ describe('Launch Missions', () => {
 
 		expect(Number(slots[0])).to.be.equal(3);
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// check mirror node for Event publish at Mission level
 		let mirrorSlots = await checkLastMirrorEvent(
@@ -3261,7 +3261,7 @@ describe('Launch Missions', () => {
 		try {
 			const missionContract = ContractId.fromEvmAddress(0, 0, contractResults[0]);
 			// wait for the contract to be created and populated to mirrors
-			await sleep(6000);
+			await sleep(7500);
 			missionG = await missionContract.populateAccountNum(client);
 		}
 		catch (e) {
@@ -3317,7 +3317,7 @@ describe('Launch Missions', () => {
 
 		expect(Number(slots[0])).to.be.equal(3);
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// check mirror node for Event publish at Mission level
 		let mirrorSlots = await checkLastMirrorEvent(
@@ -3371,7 +3371,7 @@ describe('Launch Missions', () => {
 		try {
 			const missionContract = ContractId.fromEvmAddress(0, 0, contractResults[0]);
 			// wait for the contract to be created and populated to mirrors
-			await sleep(6000);
+			await sleep(7500);
 			missionH = await missionContract.populateAccountNum(client);
 		}
 		catch (e) {
@@ -3427,7 +3427,7 @@ describe('Launch Missions', () => {
 
 		expect(Number(slots[0])).to.be.equal(8);
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// check mirror node for Event publish at Mission level
 		let mirrorSlots = await checkLastMirrorEvent(
@@ -3488,7 +3488,7 @@ describe('Launch Missions', () => {
 		try {
 			const missionContract = ContractId.fromEvmAddress(0, 0, contractResults[0]);
 			// wait for the contract to be created and populated to mirrors
-			await sleep(6000);
+			await sleep(7500);
 			missionI = await missionContract.populateAccountNum(client);
 		}
 		catch (e) {
@@ -3603,7 +3603,7 @@ describe('Launch Missions', () => {
 		expect(requirementsTx[2][0].length).to.be.equal(6);
 		console.log('limited to serials', requirementsTx[2][0], 'for', requirementsTx[0][0]);
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// check mirror node for Event publish at Mission level
 		let mirrorSlots = await checkLastMirrorEvent(
@@ -3653,7 +3653,7 @@ describe('Launch Missions', () => {
 		try {
 			const missionContract = ContractId.fromEvmAddress(0, 0, contractResults[0]);
 			// wait for the contract to be created and populated to mirrors
-			await sleep(6000);
+			await sleep(7500);
 			missionJ = await missionContract.populateAccountNum(client);
 		}
 		catch (e) {
@@ -3782,7 +3782,7 @@ describe('Launch Missions', () => {
 		try {
 			const missionContract = ContractId.fromEvmAddress(0, 0, contractResults[0]);
 			// wait for the contract to be created and populated to mirrors
-			await sleep(6000);
+			await sleep(7500);
 			missionK = await missionContract.populateAccountNum(client);
 		}
 		catch (e) {
@@ -4023,7 +4023,7 @@ describe('Join Missions', () => {
 		// check the events were emitted at both the contract and factory level
 		// factory level: MissionJoinedFactory
 		// Mission level: MissionJoined
-		await sleep(6000);
+		await sleep(7500);
 		const missionJoined = await checkLastMirrorEvent(
 			env,
 			missionA,
@@ -5399,7 +5399,7 @@ describe('Join Missions', () => {
 
 		expect(Number(stageOneSlots[0])).to.be.equal(Number(openingSlots[0]));
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// check the mission exit event is broadcast to mirror nodes
 		let completedUser = await checkLastMirrorEvent(env, missionA, missionIface, 0, true);
@@ -5460,7 +5460,7 @@ describe('Join Missions', () => {
 
 		expect(Number(stageTwoSlots[0])).to.be.equal(Number(stageOneSlots[0]));
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// check the mission exit event is broadcast to mirror nodes
 		completedUser = await checkLastMirrorEvent(env, missionA, missionIface, 0, true);
@@ -5621,7 +5621,7 @@ describe('Join Missions', () => {
 		expect(Number(decrementDetails[0])).to.be.equal(1);
 		expect(Number(decrementDetails[1])).to.be.equal(startTimestamp);
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// check getDecrementDetails for the mission via mirror node
 		const encodedCommand = missionIface.encodeFunctionData(
@@ -5910,7 +5910,7 @@ describe('Join Missions', () => {
 		expect(result[0]?.status.toString()).to.be.equal('SUCCESS');
 
 		// check the mission completion event is broadcast to mirror nodes
-		await sleep(6000);
+		await sleep(7500);
 
 		// check the mission completion event is broadcast to mirror nodes
 		const completedUser = await checkLastMirrorEvent(env, missionB, missionIface, 0, true);
@@ -6157,7 +6157,7 @@ describe('Join Missions', () => {
 		expect(result[0]?.status.toString()).to.be.equal('SUCCESS');
 
 		// check the mission completion event is broadcast to mirror nodes
-		await sleep(6000);
+		await sleep(7500);
 		let completedUser = await checkLastMirrorEvent(env, missionC, missionIface, 0, true);
 		expect(completedUser.toSolidityAddress().toLowerCase()).to.be.equal(operatorId.toSolidityAddress().toLowerCase());
 
@@ -6209,7 +6209,7 @@ describe('Join Missions', () => {
 		expect(result.status.toString()).to.be.equal('SUCCESS');
 
 		// check the mission completion event is broadcast to mirror nodes
-		await sleep(6000);
+		await sleep(7500);
 		completedUser = await checkLastMirrorEvent(env, missionC, missionIface, 0, true);
 		expect(completedUser.toSolidityAddress().toLowerCase()).to.be.equal(aliceId.toSolidityAddress().toLowerCase());
 
@@ -6262,7 +6262,7 @@ describe('Join Missions', () => {
 		}
 
 		// check the mission completion event is broadcast to mirror nodes
-		await sleep(6000);
+		await sleep(7500);
 		completedUser = await checkLastMirrorEvent(env, missionC, missionIface, 0, true);
 		expect(completedUser.toSolidityAddress().toLowerCase()).to.be.equal(bobId.toSolidityAddress().toLowerCase());
 
@@ -7767,7 +7767,7 @@ describe('Join Missions', () => {
 
 		expect(Number(slots[0])).to.be.equal(0);
 
-		await sleep(6000);
+		await sleep(7500);
 
 		// set $LAZY allowance for transfer
 		// LEGACY 1.0 - old mode using $LAZY
@@ -7979,7 +7979,7 @@ describe('Clean-up', () => {
 
 
 		// ensure mirrors have caught up
-		await sleep(6000);
+		await sleep(7500);
 
 		const outstandingAllowances = [];
 		// get the FT allowances for operator

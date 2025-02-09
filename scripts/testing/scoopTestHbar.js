@@ -18,7 +18,7 @@ try {
 	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
 	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
 }
 
@@ -27,7 +27,7 @@ async function scoopTestHbar() {
 	const toAccount = getArg('to');
 	const percent = Number(getArg('percent'));
 
-	if (getArgFlag('h') || getArgFlag('help')) {
+	if (getArgFlag('h') || getArgFlag('help') || !toAccount || !percent) {
 		console.log('Usage: node scoopTestHbar.js -to 0.0.1234 -percent 50');
 		process.exit(0);
 	}

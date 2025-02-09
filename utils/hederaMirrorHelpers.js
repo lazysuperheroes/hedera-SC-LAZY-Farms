@@ -49,6 +49,41 @@ async function checkMirrorAllowance(env, _userId, _tokenId, _spenderId) {
 	return rtnVal;
 }
 
+async function getNFTApprovedForAllAllowances(env, _userId) {
+	const baseUrl = getBaseURL(env);
+	const url = `${baseUrl}/api/v1/accounts/${_userId.toString()}/allowances/nfts?limit=100`;
+
+	const spenderTokenMap = new Map();
+
+	await axios.get(url)
+		.then((response) => {
+			const jsonResponse = response.data;
+
+			const allowances = jsonResponse.allowances;
+
+			for (let n = 0; n < allowances.length; n++) {
+				const value = allowances[n];
+				if (value.approved_for_all) {
+					// check if the map already has the key (spender)
+					if (spenderTokenMap.has(value.spender)) {
+						const tokenList = spenderTokenMap.get(value.spender);
+						tokenList.push(value.token_id);
+						spenderTokenMap.set(value.spender, tokenList);
+					}
+					else {
+						spenderTokenMap.set(value.spender, [value.token_id]);
+					}
+				}
+			}
+		})
+		.catch(function(err) {
+			console.error(err);
+			return 0;
+		});
+
+	return spenderTokenMap;
+}
+
 async function checkMirrorNFTAllowance(env, _userId, _tokenId, _serial) {
 	const baseUrl = getBaseURL(env);
 	const url = `${baseUrl}/api/v1/tokens/${_tokenId}/nfts?account.id=${_userId.toString()}`;
@@ -474,4 +509,5 @@ module.exports = {
 	checkMirrorHbarAllowance,
 	checkHbarAllowances,
 	checkNFTOwnership,
+	getNFTApprovedForAllAllowances,
 };
