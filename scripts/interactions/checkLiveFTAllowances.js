@@ -14,7 +14,7 @@ let operatorId;
 try {
 	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify ACCOUNT_ID in the .env file');
 }
 

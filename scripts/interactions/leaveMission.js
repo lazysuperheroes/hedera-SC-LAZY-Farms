@@ -23,7 +23,7 @@ try {
 	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
 	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
 }
 
@@ -31,7 +31,7 @@ try {
 	lazyTokenId = TokenId.fromString(process.env.LAZY_TOKEN_ID);
 	boostManagerId = AccountId.fromString(process.env.BOOST_MANAGER_CONTRACT_ID);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify LAZY_TOKEN_ID & BOOST_MANAGER_CONTRACT_ID in the .env file');
 }
 
@@ -263,7 +263,6 @@ const main = async () => {
 
 main()
 	.then(() => {
-		// eslint-disable-next-line no-useless-escape
 		process.exit(0);
 	})
 	.catch(error => {

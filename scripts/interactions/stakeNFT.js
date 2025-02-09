@@ -23,7 +23,7 @@ try {
 	// EDCSA key - ED25519 key is not supported
 	signingKey = PrivateKey.fromStringECDSA(process.env.SIGNING_KEY);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
 }
 
@@ -165,7 +165,6 @@ const main = async () => {
 
 main()
 	.then(() => {
-		// eslint-disable-next-line no-useless-escape
 		process.exit(0);
 	})
 	.catch(error => {

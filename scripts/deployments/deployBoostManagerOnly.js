@@ -19,7 +19,7 @@ try {
 	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
 	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
 }
 const boostManagerName = 'BoostManager';
@@ -37,7 +37,7 @@ try {
 	lazyTokenId = TokenId.fromString(process.env.LAZY_TOKEN_ID);
 	lazyGasStationId = ContractId.fromString(process.env.LAZY_GAS_STATION_CONTRACT_ID);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify LDR_CONTRACT_ID, LAZY_TOKEN_ID, and LAZY_GAS_STATION_CONTRACT_ID in the .env file');
 }
 

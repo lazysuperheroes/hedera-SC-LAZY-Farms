@@ -5,7 +5,6 @@ const {
 	PrivateKey,
 } = require('@hashgraph/sdk');
 require('dotenv').config();
-const fs = require('fs');
 const readlineSync = require('readline-sync');
 const { ethers } = require('ethers');
 const { contractExecuteFunction } = require('../../utils/solidityHelpers');
@@ -19,7 +18,7 @@ try {
 	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
 	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
 }
 
@@ -48,7 +47,7 @@ const main = async () => {
 
 	const contractId = ContractId.fromString(args[0]);
 	const destination = AccountId.fromString(args[1]);
-	
+
 	const lazyToken = process.env.LAZY_TOKEN_ID;
 
 	if (lazyToken === undefined || lazyToken == null) {
@@ -103,24 +102,24 @@ const main = async () => {
 	const amount = Math.floor(lazyBalance * (percentage / 100));
 
 	// creat interface from fragment
-	const methodFragment =  {
-        "inputs": [
-            {
-                "internalType": "address",
-                "name": "_receiver",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "_amount",
-                "type": "uint256"
-            }
-        ],
-        "name": "retrieveLazy",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    };
+	const methodFragment = {
+		'inputs': [
+			{
+				'internalType': 'address',
+				'name': '_receiver',
+				'type': 'address',
+			},
+			{
+				'internalType': 'uint256',
+				'name': '_amount',
+				'type': 'uint256',
+			},
+		],
+		'name': 'retrieveLazy',
+		'outputs': [],
+		'stateMutability': 'nonpayable',
+		'type': 'function',
+	};
 
 
 	const contractIface = new ethers.Interface([methodFragment]);

@@ -166,7 +166,6 @@ const main = async () => {
 
 main()
 	.then(() => {
-		// eslint-disable-next-line no-useless-escape
 		process.exit(0);
 	})
 	.catch(error => {

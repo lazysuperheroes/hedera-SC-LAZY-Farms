@@ -23,7 +23,7 @@ if (process.env.PRIVATE_KEY && process.env.ACCOUNT_ID) {
 		operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
 		operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 	}
-	catch (err) {
+	catch {
 		console.log('ERROR: Invalid PRIVATE_KEY or ACCOUNT_ID in the .env file.');
 		process.exit(1);
 	}
@@ -37,7 +37,7 @@ else {
 		operatorKey = PrivateKey.fromStringED25519(privateKeyInput);
 		operatorId = AccountId.fromString(accountIdInput);
 	}
-	catch (err) {
+	catch {
 		console.log('ERROR: Invalid input for PRIVATE_KEY or ACCOUNT_ID.');
 		process.exit(1);
 	}

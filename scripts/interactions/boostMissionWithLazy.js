@@ -23,7 +23,7 @@ try {
 	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 	lgsId = ContractId.fromString(process.env.LAZY_GAS_STATION_CONTRACT_ID);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID & LAZY_GAS_STATION_CONTRACT_ID in the .env file');
 }
 
@@ -268,7 +268,6 @@ const main = async () => {
 
 main()
 	.then(() => {
-		// eslint-disable-next-line no-useless-escape
 		process.exit(0);
 	})
 	.catch(error => {

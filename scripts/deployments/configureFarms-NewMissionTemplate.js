@@ -18,7 +18,7 @@ try {
 	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
 	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
 }
 const contractName = 'MissionFactory';
@@ -32,7 +32,7 @@ let client;
 try {
 	factoryContractId = ContractId.fromString(process.env.MISSION_FACTORY_CONTRACT_ID);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify MISSION_FACTORY_CONTRACT_ID in the .env file');
 }
 

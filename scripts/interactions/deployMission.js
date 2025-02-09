@@ -36,7 +36,7 @@ try {
 	operatorKey = PrivateKey.fromBytesED25519(process.env.PRIVATE_KEY);
 	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 }
-catch (err) {
+catch {
 	console.error(`${colors.red}ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file${colors.reset}`);
 	process.exit(1);
 }
