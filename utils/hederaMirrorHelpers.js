@@ -1,5 +1,6 @@
 const { AccountId } = require('@hashgraph/sdk');
 const { default: axios } = require('axios');
+const { ethers } = require('hardhat');
 
 function getBaseURL(env) {
 	if (env.toLowerCase() == 'test' || env.toLowerCase() == 'testnet') {
@@ -492,6 +493,57 @@ async function getContractEVMAddress(env, contractId) {
 		});
 }
 
+/**
+ * Uses mirror to get the correct EVM address
+ * @param {string} env
+ * @param {AccountId | string} accountId
+ * @returns string
+ */
+async function homebrewPopulateAccountEvmAddress(env, accountId) {
+	if (accountId === null) {
+		throw new Error('field `accountId` should not be null');
+	}
+
+	const baseUrl = getBaseURL(env);
+
+	const acctId = (typeof accountId === 'string') ? AccountId.fromString(accountId) : accountId;
+
+	if (acctId.num === null) {
+		throw new Error('field `num` should not be null');
+	}
+
+	if (acctId.num.toString() === '0') {
+		return ethers.ZeroAddress;
+	}
+
+	let evmAddress;
+	try {
+		const url = `${baseUrl}/api/v1/accounts/${acctId.num.toString()}`;
+		const mirrorAccountId = (await axios.get(url)).data.evm_address;
+		evmAddress = ethers.getAddress(mirrorAccountId);
+	}
+	catch (error) {
+		console.error('Error fetching EVM address:', error);
+		evmAddress = acctId.toSolidityAddress();
+	}
+	return evmAddress;
+}
+
+async function homebrewPopulateAccountNum(env, evmAddress) {
+	if (evmAddress === null) {
+		throw new Error('field `evmAddress` should not be null');
+	}
+
+	const baseUrl = getBaseURL(env);
+
+	const url = `${baseUrl}/api/v1/accounts/${evmAddress}`;
+	const mirrorAccountId = (await axios.get(url)).data.account.id;
+	const acctId = AccountId.fromString(mirrorAccountId);
+	const accountId = acctId.toString();
+
+	return accountId;
+}
+
 module.exports = {
 	checkMirrorAllowance,
 	checkMirrorNFTAllowance,
@@ -510,4 +562,6 @@ module.exports = {
 	checkHbarAllowances,
 	checkNFTOwnership,
 	getNFTApprovedForAllAllowances,
+	homebrewPopulateAccountEvmAddress,
+	homebrewPopulateAccountNum,
 };
