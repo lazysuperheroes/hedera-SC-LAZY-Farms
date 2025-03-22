@@ -24,7 +24,9 @@
 5) setup boost manager, deploy missions and get going:
 
 *configureGemBoost.js* [defaults of 5/10/15/25/40/20 for C/R/SR/UR/LR/SPE already in place]
-*configureLazyBoost.js* [default at 500 $LAZY]
+*configureLazyBoost.js* [default at 500 $LAZY -> moved to 2,500 $LAZY]
+-) node .\scripts\interactions\configureLazyBoost.js 0.0.8257105 2500 10 50
+-) $LAZY Boost Cost updated. Transaction ID: 0.0.6284762@1742640555.636093195
 
 *addCollectionToBoostLevel.js*
 
