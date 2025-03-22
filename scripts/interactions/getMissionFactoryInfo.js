@@ -245,7 +245,54 @@ const main = async () => {
 		: 'Not Set',
 	);
 
-	// TODO: on new release add getAdmins / getDeployers
+	// getAdmins()
+	encodedCommand = missionFactoryIface.encodeFunctionData(
+		'getAdmins',
+		[],
+	);
+
+	result = await readOnlyEVMFromMirrorNode(
+		env,
+		contractId,
+		encodedCommand,
+		operatorId,
+		false,
+	);
+
+	const admins = missionFactoryIface.decodeFunctionResult(
+		'getAdmins',
+		result,
+	);
+
+	// convert from EVm address to AccountId
+	const adminList = admins[0].map((a) => AccountId.fromEvmAddress(0, 0, a));
+
+	console.log('Admins:', adminList.join(', '));
+
+	// getDeployers()
+	encodedCommand = missionFactoryIface.encodeFunctionData(
+		'getDeployers',
+		[],
+	);
+
+	result = await readOnlyEVMFromMirrorNode(
+		env,
+		contractId,
+		encodedCommand,
+		operatorId,
+		false,
+	);
+
+	const deployers = missionFactoryIface.decodeFunctionResult(
+		'getDeployers',
+		result,
+	);
+
+	// convert from EVm address to AccountId
+	const deployerList = deployers[0].map((a) => AccountId.fromEvmAddress(0, 0, a));
+
+	console.log('Deployers:', deployerList.join(', '));
+
 };
 
 main()
