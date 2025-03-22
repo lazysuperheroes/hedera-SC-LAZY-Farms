@@ -257,43 +257,45 @@ async function checkLastMirrorEvent(env, contractId, iface, offset = 1, account 
 
 async function getEventsFromMirror(env, contractId, iface) {
 	const baseUrl = getBaseURL(env);
-
-	const url = `${baseUrl}/api/v1/contracts/${contractId.toString()}/results/logs?order=desc&limit=100`;
+	let url = `${baseUrl}/api/v1/contracts/${contractId.toString()}/results/logs?order=desc&limit=100`;
 
 	const eventsToReturn = [];
-	return axios.get(url)
-		.then(function(response) {
-			const jsonResponse = response.data;
-			jsonResponse.logs.forEach(log => {
-				// decode the event data
-				if (log.data == '0x') return;
-				const event = iface.parseLog({ topics: log.topics, data: log.data });
-
-				let outputStr = 'Block: ' + log.block_number
-						+ ' : Tx Hash: ' + log.transaction_hash
-						+ ' : Event: ' + event.name + ' : ';
-
-				for (let f = 0; f < event.args.length; f++) {
-					const field = event.args[f];
-					// console.log('Field:', f, field, typeof field);
-
-					let output;
-					if (typeof field === 'string') {
-						output = field.startsWith('0x') ? AccountId.fromEvmAddress(0, 0, field).toString() : field;
-					}
-					else {
-						output = field.toString();
-					}
-					output = f == 0 ? output : ' : ' + output;
-					outputStr += output;
-				}
-				eventsToReturn.push(outputStr);
-			});
-			return eventsToReturn;
-		})
-		.catch(function(err) {
+	while (url) {
+		const response = await axios.get(url).catch((err) => {
 			console.error(err);
+			return null;
 		});
+		if (!response) break;
+
+		const jsonResponse = response.data;
+		jsonResponse.logs.forEach(async log => {
+			// decode the event data
+			if (log.data == '0x') return;
+			const event = iface.parseLog({ topics: log.topics, data: log.data });
+
+			let outputStr = 'Block: ' + log.block_number
+					+ ' : Tx Hash: ' + log.transaction_hash
+					+ ' : Event: ' + event.name + ' : ';
+
+			for (let f = 0; f < event.args.length; f++) {
+				const field = event.args[f];
+				let output;
+				if (typeof field === 'string') {
+					output = field.startsWith('0x') ? AccountId.fromEvmAddress(0, 0, field) : field;
+				}
+				else {
+					output = field.toString();
+				}
+				output = f == 0 ? output : ' : ' + output;
+				outputStr += output;
+			}
+			eventsToReturn.push(outputStr);
+		});
+
+		// Update the URL for the next page
+		url = jsonResponse.links?.next ? `${baseUrl}${jsonResponse.links.next}` : null;
+	}
+	return eventsToReturn;
 }
 
 /**
