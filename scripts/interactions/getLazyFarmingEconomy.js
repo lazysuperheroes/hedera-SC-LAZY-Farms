@@ -1,134 +1,65 @@
-const { AccountId, ContractId, TokenId } = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
-const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
-const { homebrewPopulateAccountEvmAddress, getTokenDetails } = require('../../utils/hederaMirrorHelpers');
+/**
+ * Get $LAZY Farming Economy overview
+ * Queries MissionFactory for missions, boosts, and active farming stats
+ * Refactored to use shared utilities
+ */
+const { ContractId, TokenId } = require('@hashgraph/sdk');
 const { default: axios } = require('axios');
-
-// Get operator from .env file
-let operatorId;
-try {
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch (err) {
-	console.log('ERROR: Must specify ACCOUNT_ID in the .env file', err);
-}
-
-const contractName = 'MissionFactory';
-const boostManagerName = 'BoostManager';
-const missionName = 'Mission';
-
-const env = process.env.ENVIRONMENT ?? null;
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript } = require('../../utils/scriptHelpers');
+const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
+const { getTokenDetails, getBaseURL, homebrewPopulateAccountNum } = require('../../utils/hederaMirrorHelpers');
 
 const main = async () => {
-	// configure the client object
-	if (operatorId === undefined || operatorId == null) {
-		console.log(
-			'Environment required, please specify ACCOUNT_ID & SIGNING_KEY in the .env file',
-		);
-		process.exit(1);
-	}
+	const { operatorId, env } = createHederaClient({ requireOperator: true });
 
-	const args = process.argv.slice(2);
-	if (args.length != 1 || getArgFlag('h')) {
-		console.log('Usage: getLazyFarmingEconomy.js 0.0.MF');
-		console.log('		0.0.MF is the MissionFactory');
-		return;
-	}
+	const args = parseArgs(1, 'getLazyFarmingEconomy.js 0.0.MF', [
+		'0.0.MF is the MissionFactory',
+	]);
 
 	const contractId = ContractId.fromString(args[0]);
 
-	console.log('\n-**STAKING**');
-	console.log('-Using ENIVRONMENT:', env);
-	console.log('-Using Operator:', operatorId.toString());
-	console.log('-Using MissionFactory Contract:', contractId.toString());
-
-	// import ABI
-	const missionFactoryJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
-
-	const missionFactoryIface = new ethers.Interface(missionFactoryJSON.abi);
-
-	// import ABI
-	const boostManagerJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${boostManagerName}.sol/${boostManagerName}.json`,
-		),
-	);
-
-	const boostManagerIface = new ethers.Interface(boostManagerJSON.abi);
-
-	// import ABI
-	const missionJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${missionName}.sol/${missionName}.json`,
-		),
-	);
-
-	const missionIface = new ethers.Interface(missionJSON.abi);
-
-	// query mirror nodes to call the following methods:
-	// 1) getDeployedMissions
-
-	let encodedCommand = missionFactoryIface.encodeFunctionData(
-		'getAvailableSlots',
-		[],
-	);
-
-	let result = await readOnlyEVMFromMirrorNode(
+	printHeader({
+		scriptName: 'Lazy Farming Economy',
 		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
+		operatorId: operatorId.toString(),
+		missionFactory: contractId.toString(),
+	});
 
-	const getAvailableMissions = missionFactoryIface.decodeFunctionResult(
-		'getAvailableSlots',
-		result,
-	);
+	const missionFactoryIface = loadInterface('MissionFactory');
+	const boostManagerIface = loadInterface('BoostManager');
+	const missionIface = loadInterface('Mission');
 
-	// lazyToken
-	encodedCommand = missionFactoryIface.encodeFunctionData(
-		'lazyToken',
-		[],
-	);
+	// Helper for mirror node queries
+	const queryFactory = async (fcnName, params = []) => {
+		const encoded = missionFactoryIface.encodeFunctionData(fcnName, params);
+		const result = await readOnlyEVMFromMirrorNode(env, contractId, encoded, operatorId, false);
+		return missionFactoryIface.decodeFunctionResult(fcnName, result);
+	};
 
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
+	// Get available slots
+	const getAvailableMissions = await queryFactory('getAvailableSlots');
 
-	const lazyToken = missionFactoryIface.decodeFunctionResult(
-		'lazyToken',
-		result,
-	);
-
+	// Get lazyToken
+	const lazyToken = await queryFactory('lazyToken');
 	const lazyTokenId = TokenId.fromSolidityAddress(lazyToken[0]);
 
-	// get the details of the lazyToken from the mirror node
+	// Get lazyToken details
 	const lazyTokenDetails = await getTokenDetails(env, lazyTokenId);
 
 	let totalSlots = 0;
 	const liveMissionCount = getAvailableMissions[0].length;
 	const missionRequirements = {};
+
 	for (let i = 0; i < liveMissionCount; i++) {
 		totalSlots += Number(getAvailableMissions[0][i]);
 		const missionIdAsEVM = getAvailableMissions[1][i];
 
-		const missionId = await homebrewPopulateAccountEvmAddress(env, missionIdAsEVM);
+		const missionId = await homebrewPopulateAccountNum(env, missionIdAsEVM);
 
-		// get the mission details
+		// Get mission requirements
 		const encodedMissionCall = missionIface.encodeFunctionData('getRequirements', []);
-
 		const missionResult = await readOnlyEVMFromMirrorNode(
 			env,
 			missionIdAsEVM,
@@ -139,9 +70,8 @@ const main = async () => {
 
 		const missionDetails = missionIface.decodeFunctionResult('getRequirements', missionResult);
 
-		// convert the [0] element from a list of EVM addresses to a list of AccountIds
+		// Convert EVM addresses to TokenIds
 		const missionRequirementsList = [];
-
 		for (let j = 0; j < missionDetails[0].length; j++) {
 			const tokenId = TokenId.fromSolidityAddress(missionDetails[0][j]);
 			const serialLock = Boolean(missionDetails[1][j]);
@@ -164,51 +94,25 @@ const main = async () => {
 		missionRequirements[missionId.toString()] = missionObj;
 	}
 
-	// get the BoostManager details from the MissionFactory
-	// boostManager
-	encodedCommand = missionFactoryIface.encodeFunctionData(
-		'boostManager',
-		[],
-	);
-
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	const boostManager = missionFactoryIface.decodeFunctionResult(
-		'boostManager',
-		result,
-	);
-
+	// Get BoostManager from MissionFactory
+	const boostManager = await queryFactory('boostManager');
 	const boostManagerId = ContractId.fromEvmAddress(0, 0, boostManager[0]);
 
-	// query the BoostManager for the live Boosts with liveBoosts()
-	encodedCommand = boostManagerIface.encodeFunctionData(
-		'liveBoosts',
-		[],
-	);
-
-	result = await readOnlyEVMFromMirrorNode(
+	// Query BoostManager for live boosts
+	const encodedBoostCall = boostManagerIface.encodeFunctionData('liveBoosts', []);
+	const boostResult = await readOnlyEVMFromMirrorNode(
 		env,
 		boostManagerId,
-		encodedCommand,
+		encodedBoostCall,
 		operatorId,
 		false,
 	);
 
-	const boostData = boostManagerIface.decodeFunctionResult(
-		'liveBoosts',
-		result,
-	);
-
+	const boostData = boostManagerIface.decodeFunctionResult('liveBoosts', boostResult);
 	const liveBoosts = Number(boostData[0]);
 
-	// query the logs of MissionFactory to figure out number of missions completed and total boosts.
-	const { boosts, missionEntry, completedMissions } = await parseMissionFactoryLogs(missionFactoryIface, contractId);
+	// Parse MissionFactory logs
+	const { boosts, missionEntry, completedMissions } = await parseMissionFactoryLogs(env, missionFactoryIface, contractId);
 
 	console.log('Available Slots:', totalSlots);
 	console.log('Live Mission Count:', liveMissionCount);
@@ -220,12 +124,13 @@ const main = async () => {
 };
 
 /**
- * Hard coded inside the file to ease portability
- * @param {Ethers.Interface} iface Ethers Interface object
- * @param {ContractId} contractId ContractId object
+ * Parse MissionFactory logs for stats
+ * @param {string} env - Environment
+ * @param {ethers.Interface} iface - Ethers Interface object
+ * @param {ContractId} contractId - ContractId object
  * @returns {Promise<{boosts: number, missionEntry: number, completedMissions: number}>}
  */
-async function parseMissionFactoryLogs(iface, contractId) {
+async function parseMissionFactoryLogs(env, iface, contractId) {
 	const baseUrl = getBaseURL(env);
 	let missionEntry = 0;
 	let boosts = 0;
@@ -241,12 +146,11 @@ async function parseMissionFactoryLogs(iface, contractId) {
 		if (!response) break;
 
 		const jsonResponse = response.data;
-		jsonResponse.logs.forEach(async log => {
-			// decode the event data
+		jsonResponse.logs.forEach(log => {
+			// Decode the event data
 			if (log.data == '0x') return;
 			const event = iface.parseLog({ topics: log.topics, data: log.data });
 
-			// switch on the event name
 			switch (event.name) {
 			case 'MissionJoinedFactory':
 				missionEntry++;
@@ -258,7 +162,6 @@ async function parseMissionFactoryLogs(iface, contractId) {
 				completedMissions++;
 				break;
 			}
-
 		});
 
 		// Update the URL for the next page
@@ -268,29 +171,4 @@ async function parseMissionFactoryLogs(iface, contractId) {
 	return { boosts, missionEntry, completedMissions };
 }
 
-function getBaseURL() {
-	if (env.toLowerCase() == 'test' || env.toLowerCase() == 'testnet') {
-		return 'https://testnet.mirrornode.hedera.com';
-	}
-	else if (env.toLowerCase() == 'main' || env.toLowerCase() == 'mainnet') {
-		return 'https://mainnet-public.mirrornode.hedera.com';
-	}
-	else if (env.toLowerCase() == 'preview' || env.toLowerCase() == 'previewnet') {
-		return 'https://previewnet.mirrornode.hedera.com';
-	}
-	else if (env.toLowerCase() == 'local') {
-		return 'http://localhost:8000';
-	}
-	else {
-		throw new Error('ERROR: Must specify either MAIN, TEST, LOCAL or PREVIEW as environment');
-	}
-}
-
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch((error) => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

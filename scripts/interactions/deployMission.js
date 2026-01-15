@@ -1,133 +1,83 @@
-/* eslint-disable prefer-const */
-const {
-	Client,
-	AccountId,
-	PrivateKey,
-	TokenId,
-	ContractId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
+/**
+ * Deploy a new Mission via MissionFactory
+ * Refactored to use shared utilities
+ */
+const { ContractId, TokenId } = require('@hashgraph/sdk');
+const { createHederaClient, getCommonContractIds } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList } = require('../../utils/scriptHelpers');
 const { contractExecuteFunction } = require('../../utils/solidityHelpers');
 const { sleep } = require('../../utils/nodeHelpers');
-const readline = require('readline');
-
-//   readline interface
-const rl = readline.createInterface({
-	input: process.stdin,
-	output: process.stdout,
-});
-
-// Color codes
-const colors = {
-	reset: '\x1b[0m',
-	cyan: '\x1b[36m',
-	yellow: '\x1b[33m',
-	red: '\x1b[31m',
-};
-
-// Promisify rl.question to use async/await with color
-const question = (query, color = colors.reset) => new Promise((resolve) => rl.question(color + query + colors.reset, resolve));
-
-let operatorKey;
-let operatorId;
-try {
-	operatorKey = PrivateKey.fromBytesED25519(process.env.PRIVATE_KEY);
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.error(`${colors.red}ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file${colors.reset}`);
-	process.exit(1);
-}
-
-const contractName = 'MissionFactory';
-let client;
+const { GAS } = require('../../utils/constants');
 
 const main = async () => {
-	const defaultEnvironment = process.env.ENVIRONMENT ? `(type enter to use default: ${process.env.ENVIRONMENT})` : '';
-	const environment = await question(`Select the environment TEST, MAIN, PREVIEW, LOCAL ${defaultEnvironment}: `, colors.cyan) || process.env.ENVIRONMENT;
+	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
 
-	const defaultContractId = process.env.MISSION_FACTORY_CONTRACT_ID ? `(type enter to use default: ${process.env.MISSION_FACTORY_CONTRACT_ID})` : '';
-	const contractIdInput = await question(`Enter the Mission Factory contract ID ${defaultContractId}: `, colors.yellow) || process.env.MISSION_FACTORY_CONTRACT_ID;
+	const args = parseArgs(9, 'deployMission.js <factoryId> <duration> <fee> <requirements> <rewards> <burn> <expiry> <numReq> <numRew>', [
+		'<factoryId> - MissionFactory contract ID (e.g., 0.0.12345) or "env" to use MISSION_FACTORY_CONTRACT_ID',
+		'<duration> - Mission duration in seconds',
+		'<fee> - Entry fee in $LAZY (smallest unit)',
+		'<requirements> - Requirement token IDs (comma separated, e.g., 0.0.111,0.0.222)',
+		'<rewards> - Reward token IDs (comma separated, e.g., 0.0.333,0.0.444)',
+		'<burn> - Burn percentage of LAZY fees (0-100)',
+		'<expiry> - Timestamp for mission expiry (last entry time)',
+		'<numReq> - Number of requirements to enter the mission',
+		'<numRew> - Number of rewards per user',
+	]);
 
-	const durationInput = await question('Enter the duration of the mission in seconds: ', colors.cyan);
-	const feeInput = await question('Enter the fee in $LAZY: ', colors.yellow);
-	const requirementsInput = await question('Enter requirement token IDs (comma separated, no spaces): ', colors.cyan);
-	const rewardsInput = await question('Enter reward token IDs (comma separated, no spaces): ', colors.yellow);
-	const burnInput = await question('Enter the burn % of LAZY fees when entering the mission (0-100): ', colors.cyan);
-	const expiryInput = await question('Enter the timestamp for expiry: ', colors.yellow);
-	const numReqInput = await question('Enter the number of requirements to enter the mission: ', colors.cyan);
-	const numRewInput = await question('Enter the number of rewards for a user: ', colors.yellow);
-	rl.close();
-
-	// ASCII Rocket
-	console.log(`
-        ${colors.yellow}         
-         |
-         |
-        / \\
-       / _ \\
-      |.o '.|
-      |'._.'|
-      |  🗲   |
-     ,'|  |  |'.
-    /  |  |  |  \\
-    |,-'--|--'-.|${colors.reset}
-    `);
-
-	// Parse inputs
-	const contractId = ContractId.fromString(contractIdInput);
-	const duration = parseInt(durationInput);
-	const fee = parseInt(feeInput);
-	const requirements = requirementsInput.split(',');
-	const rewards = rewardsInput.split(',');
-	const burn = parseInt(burnInput);
-	const expiry = parseInt(expiryInput);
-	const numReq = parseInt(numReqInput);
-	const numRew = parseInt(numRewInput);
-
-	// Configure client based on environment
-	switch (environment.toUpperCase()) {
-	case 'TEST': {
-		client = Client.forTestnet();
-		break;
+	// Parse factory ID - allow "env" to use environment variable
+	let contractId;
+	if (args[0].toLowerCase() === 'env') {
+		const { missionFactoryId } = getCommonContractIds();
+		if (!missionFactoryId) {
+			console.log('ERROR: MISSION_FACTORY_CONTRACT_ID not set in .env file');
+			process.exit(1);
+		}
+		contractId = missionFactoryId;
 	}
-	case 'MAIN': {
-		client = Client.forMainnet();
-		break;
-	}
-	case 'PREVIEW': {
-		client = Client.forPreviewnet();
-		break;
-	}
-	case 'LOCAL': {
-		let node = { '127.0.0.1:50211': new AccountId(3) };
-		client = Client.forNetwork(node).setMirrorNetwork('127.0.0.1:5600');
-		break;
-	}
+	else {
+		contractId = ContractId.fromString(args[0]);
 	}
 
-	client.setOperator(operatorId, operatorKey);
+	const duration = parseInt(args[1]);
+	const fee = parseInt(args[2]);
+	const requirements = parseCommaList(args[3]).map(t => TokenId.fromString(t));
+	const rewards = parseCommaList(args[4]).map(t => TokenId.fromString(t));
+	const burn = parseInt(args[5]);
+	const expiry = parseInt(args[6]);
+	const numReq = parseInt(args[7]);
+	const numRew = parseInt(args[8]);
 
-	const reqTokenAsSolidityList = requirements.map(tokenId => TokenId.fromString(tokenId).toSolidityAddress());
-	const rewTokenAsSolidityList = rewards.map(tokenId => TokenId.fromString(tokenId).toSolidityAddress());
+	printHeader({
+		scriptName: 'Deploy Mission',
+		env,
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+		additionalInfo: {
+			'Duration': `${duration} seconds (${duration / 60} minutes)`,
+			'Entry Fee': `${fee} $LAZY`,
+			'Requirements': requirements.map(r => r.toString()).join(', '),
+			'Rewards': rewards.map(r => r.toString()).join(', '),
+			'Burn %': `${burn}%`,
+			'Expiry': expiry > 0 ? new Date(expiry * 1000).toISOString() : 'None',
+			'Num Requirements': numReq,
+			'Num Rewards': numRew,
+		},
+	});
 
-	// Import ABI
-	const missionJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
+	const missionFactoryIface = loadInterface('MissionFactory');
 
-	const missionFactoryIface = new ethers.Interface(missionJSON.abi);
+	// Convert tokens to Solidity addresses
+	const reqTokenAsSolidityList = requirements.map(tokenId => tokenId.toSolidityAddress());
+	const rewTokenAsSolidityList = rewards.map(tokenId => tokenId.toSolidityAddress());
 
-	// deployMission
+	confirmOrExit('Do you want to deploy this mission?');
+
 	const result = await contractExecuteFunction(
 		contractId,
 		missionFactoryIface,
 		client,
-		3_000_000,
+		GAS.MISSION_DEPLOY,
 		'deployMission',
 		[
 			duration,
@@ -140,26 +90,21 @@ const main = async () => {
 			numRew,
 		],
 	);
-	if (result[0]?.status?.toString() != 'SUCCESS') {
-		console.error('ERROR: Transaction failed');
+
+	if (result[0]?.status?.toString() !== 'SUCCESS') {
+		console.log('ERROR: Transaction failed:', result[0]?.status ?? result);
 		return;
 	}
 
 	const missionContract = ContractId.fromEvmAddress(0, 0, result[1][0]);
+
 	// Wait for the contract to be created and populated to mirrors
 	await sleep(5000);
 	const missionId = await missionContract.populateAccountNum(client);
 
-	console.log('Mission deployed:', missionId.toString());
+	console.log('\nMission deployed successfully!');
+	console.log('Mission Contract ID:', missionId.toString());
+	logResult(result, 'Mission Deployment');
 };
 
-main()
-	.then(() => {
-		console.log('Process completed successfully.');
-		process.exit(0);
-	})
-	.catch(error => {
-		console.error(error);
-		process.exit(1);
-	});
-
+runScript(main);

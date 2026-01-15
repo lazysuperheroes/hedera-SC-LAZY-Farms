@@ -1,191 +1,64 @@
-const {
-	AccountId,
-	ContractId,
-	TokenId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
+/**
+ * Get BoostManager contract information
+ * Refactored to use shared utilities
+ */
+const { ContractId, TokenId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript } = require('../../utils/scriptHelpers');
 const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
 const { getTokenDetails } = require('../../utils/hederaMirrorHelpers');
 const { lookupLevel } = require('../../utils/LazyFarmingHelper');
 
-// Get operator from .env file
-let operatorId;
-try {
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'BoostManager';
-
-const env = process.env.ENVIRONMENT ?? null;
-
 const main = async () => {
-	// configure the client object
-	if (
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const { operatorId, env } = createHederaClient({ requireOperator: true });
 
-	const args = process.argv.slice(2);
-	if (args.length != 1 || getArgFlag('h')) {
-		console.log('Usage: getBoostManagerInfo.js 0.0.BBB');
-		console.log('       BB is the boost manager address');
-		return;
-	}
+	const args = parseArgs(1, 'getBoostManagerInfo.js 0.0.BBB', ['BBB is the boost manager address']);
 
 	const contractId = ContractId.fromString(args[0]);
 
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-
-	// import ABI
-	const boostManagerJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
-
-	const boostManagerIface = new ethers.Interface(boostManagerJSON.abi);
-
-	// query the EVM via mirror node (readOnlyEVMFromMirrorNode) to know
-	// 1) getDeployedMissions
-
-	let encodedCommand = boostManagerIface.encodeFunctionData('lazyBoostCost', []);
-
-	let result = await readOnlyEVMFromMirrorNode(
+	printHeader({
+		scriptName: 'BoostManager Info',
 		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+	});
 
-	const cost = boostManagerIface.decodeFunctionResult('lazyBoostCost', result);
+	const boostManagerIface = loadInterface('BoostManager');
 
-	// get the Lazy token ID -> lazyToken
+	// Helper for mirror node queries
+	const query = async (fcnName, params = []) => {
+		const encoded = boostManagerIface.encodeFunctionData(fcnName, params);
+		const result = await readOnlyEVMFromMirrorNode(env, contractId, encoded, operatorId, false);
+		return boostManagerIface.decodeFunctionResult(fcnName, result);
+	};
 
-	encodedCommand = boostManagerIface.encodeFunctionData('lazyToken', []);
-
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	const lazyToken = boostManagerIface.decodeFunctionResult('lazyToken', result);
+	// Get lazy token and its details
+	const lazyToken = await query('lazyToken');
 	const lazyTokenId = TokenId.fromSolidityAddress(lazyToken[0]);
-
-	// get the decimals of the lazy token
 	const lazyTokenDetails = await getTokenDetails(env, lazyTokenId);
 
-	console.log('Cost to boost with FT:', Number(cost[0].toString()) / 10 ** lazyTokenDetails.decimals, lazyTokenDetails.symbol, '(', lazyTokenId.toString(), ')');
+	const cost = await query('lazyBoostCost');
+	console.log('Cost to boost with FT:', Number(cost[0]) / 10 ** lazyTokenDetails.decimals, lazyTokenDetails.symbol, '(', lazyTokenId.toString(), ')');
 
-	// check the reduction via lazyBoostReduction
-	encodedCommand = boostManagerIface.encodeFunctionData('lazyBoostReduction', []);
-
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	const reduction = boostManagerIface.decodeFunctionResult('lazyBoostReduction', result);
-
+	const reduction = await query('lazyBoostReduction');
 	console.log('Consumable boost reduces your time remaining by:', Number(reduction[0]), '%');
 
-	// get the feeBurnPercentage
-	encodedCommand = boostManagerIface.encodeFunctionData('feeBurnPercentage', []);
-
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	const feeBurnPercentage = boostManagerIface.decodeFunctionResult('feeBurnPercentage', result);
-
+	const feeBurnPercentage = await query('feeBurnPercentage');
 	console.log('Fee Burn Percentage:', Number(feeBurnPercentage[0]), '%');
 
-	// missionFactory
-	encodedCommand = boostManagerIface.encodeFunctionData('missionFactory', []);
-
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	const missionFactory = boostManagerIface.decodeFunctionResult('missionFactory', result);
-
+	const missionFactory = await query('missionFactory');
 	console.log('Mission Factory:', ContractId.fromEvmAddress(0, 0, missionFactory[0]).toString());
 
-	// liveBoosts
-
-	encodedCommand = boostManagerIface.encodeFunctionData('liveBoosts', []);
-
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	const liveBoosts = boostManagerIface.decodeFunctionResult('liveBoosts', result);
-
+	const liveBoosts = await query('liveBoosts');
 	console.log('Live Boosts:', Number(liveBoosts[0]));
 
-	// getGemCollections
+	const gemCollections = await query('getGemCollections');
+	console.log('Gem Collections:', gemCollections[0].map(c => TokenId.fromSolidityAddress(c).toString()).join(', '));
 
-	encodedCommand = boostManagerIface.encodeFunctionData('getGemCollections', []);
-
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	const gemCollections = boostManagerIface.decodeFunctionResult('getGemCollections', result);
-
-	console.log('Gem Collections:', gemCollections[0].map((c) => TokenId.fromSolidityAddress(c).toString()).join(', '));
-
+	// Display boost data for all 6 levels
 	for (let i = 0; i < 6; i++) {
-		// getBoostData(i)
-
-		encodedCommand = boostManagerIface.encodeFunctionData('getBoostData', [i]);
-
-		result = await readOnlyEVMFromMirrorNode(
-			env,
-			contractId,
-			encodedCommand,
-			operatorId,
-			false,
-		);
-
-		const boostData = boostManagerIface.decodeFunctionResult('getBoostData', result);
-
-
+		const boostData = await query('getBoostData', [i]);
 		console.log('Boost', lookupLevel(i));
 		for (let j = 0; j < boostData[0].length; j++) {
 			console.log('\tGem:', TokenId.fromSolidityAddress(boostData[0][j]).toString());
@@ -196,11 +69,4 @@ const main = async () => {
 	}
 };
 
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch((error) => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

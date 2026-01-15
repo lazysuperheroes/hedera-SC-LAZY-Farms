@@ -1,131 +1,63 @@
-const {
-	Client,
-	AccountId,
-	PrivateKey,
-	ContractId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
-const readlineSync = require('readline-sync');
+/**
+ * Configure $LAZY boost settings in BoostManager
+ * Refactored to use shared utilities
+ */
+const { ContractId } = require('@hashgraph/sdk');
+const { createHederaClient, getLazyDecimals } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, confirmOrExit, logResult, runScript } = require('../../utils/scriptHelpers');
 const { contractExecuteFunction } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
-
-// Get operator from .env file
-let operatorKey;
-let operatorId;
-try {
-	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'BoostManager';
-
-const env = process.env.ENVIRONMENT ?? null;
-const LAZY_DECIMALS = process.env.LAZY_DECIMALS ?? 1;
-let client;
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorKey === undefined ||
-		operatorKey == null ||
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify PRIVATE_KEY & ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
+	const lazyDecimals = getLazyDecimals();
 
-	if (env.toUpperCase() == 'TEST') {
-		client = Client.forTestnet();
-		console.log('testing in *TESTNET*');
-	}
-	else if (env.toUpperCase() == 'MAIN') {
-		client = Client.forMainnet();
-		console.log('testing in *MAINNET*');
-	}
-	else if (env.toUpperCase() == 'PREVIEW') {
-		client = Client.forPreviewnet();
-		console.log('testing in *PREVIEWNET*');
-	}
-	else if (env.toUpperCase() == 'LOCAL') {
-		const node = { '127.0.0.1:50211': new AccountId(3) };
-		client = Client.forNetwork(node).setMirrorNetwork('127.0.0.1:5600');
-		console.log('testing in *LOCAL*');
-	}
-	else {
-		console.log(
-			'ERROR: Must specify either MAIN or TEST or LOCAL as environment in .env file',
-		);
-		return;
-	}
-
-	client.setOperator(operatorId, operatorKey);
-
-	const args = process.argv.slice(2);
-	if (args.length != 4 || getArgFlag('h')) {
-		console.log('Usage: configureLazyBoost.js 0.0.BBB <amount> <percentage> <burn>');
-		console.log('		0.0.BBB is the BoostManager contract to update');
-		console.log('		<amount> is the amount of lazy boost');
-		console.log('		- Must be a number');
-		console.log('		<percentage> is the percentage to reduce mission time');
-		console.log('		- Must be a number (1-100)%');
-		console.log('		<burn> is the % of $LAZY to burn');
-		console.log('		- Must be a number (0-100)%');
-		return;
-	}
+	const args = parseArgs(4, 'configureLazyBoost.js 0.0.BBB <amount> <percentage> <burn>', [
+		'0.0.BBB is the BoostManager contract to update',
+		'<amount> is the amount of lazy boost',
+		'<percentage> is the percentage to reduce mission time (1-100)',
+		'<burn> is the % of $LAZY to burn (0-100)',
+	]);
 
 	const contractId = ContractId.fromString(args[0]);
-	let lazyAmt;
-	let reductionPercentage;
-	let burnPercentage;
+
+	let lazyAmt, reductionPercentage, burnPercentage;
 	try {
-		lazyAmt = parseInt(args[1]);
-		reductionPercentage = parseInt(args[2]);
-		burnPercentage = parseInt(args[3]);
-		// validate percentage
+		lazyAmt = parseInt(args[1], 10);
+		reductionPercentage = parseInt(args[2], 10);
+		burnPercentage = parseInt(args[3], 10);
+
 		if (reductionPercentage < 1 || reductionPercentage > 100) {
-			throw new Error('Invalid reduction percentage');
+			throw new Error('Reduction percentage must be 1-100');
 		}
 		if (burnPercentage < 0 || burnPercentage > 100) {
-			throw new Error('Invalid burn percentage');
+			throw new Error('Burn percentage must be 0-100');
 		}
 	}
 	catch (err) {
-		console.log('ERROR: Must specify a number for amount and percentage', err);
-		return;
+		console.log('ERROR: Invalid parameters.', err.message);
+		process.exit(1);
 	}
 
-	const rawLazy = lazyAmt * Math.pow(10, LAZY_DECIMALS);
+	const rawLazy = lazyAmt * Math.pow(10, lazyDecimals);
 
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-	console.log('\n-Amount:', lazyAmt, '$LAZY (', rawLazy, ')');
-	console.log('\n-Percentage:', reductionPercentage, '%');
+	printHeader({
+		scriptName: 'Configure $LAZY Boost',
+		env,
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+		additionalInfo: {
+			'Amount': `${lazyAmt} $LAZY (${rawLazy} raw)`,
+			'Reduction %': `${reductionPercentage}%`,
+			'Burn %': `${burnPercentage}%`,
+		},
+	});
 
-	// import ABI
-	const boostManagerJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
+	confirmOrExit('Do you want to update the $LAZY boost?');
 
-	const boostManagerIface = new ethers.Interface(boostManagerJSON.abi);
+	const boostManagerIface = loadInterface('BoostManager');
 
-
-	const proceed = readlineSync.keyInYNStrict('Do you want to update the $LAZY boost?');
-	if (!proceed) {
-		console.log('User Aborted');
-		return;
-	}
-
+	// Set cost
 	let result = await contractExecuteFunction(
 		contractId,
 		boostManagerIface,
@@ -135,13 +67,11 @@ const main = async () => {
 		[rawLazy],
 	);
 
-	if (result[0]?.status?.toString() != 'SUCCESS') {
-		console.log('Error setting $LAZY cost:', result);
+	if (!logResult(result, '$LAZY Boost Cost update')) {
 		return;
 	}
 
-	console.log('$LAZY Boost Cost updated. Transaction ID:', result[2]?.transactionId?.toString());
-
+	// Set reduction percentage
 	result = await contractExecuteFunction(
 		contractId,
 		boostManagerIface,
@@ -151,13 +81,11 @@ const main = async () => {
 		[reductionPercentage],
 	);
 
-	if (result[0]?.status?.toString() != 'SUCCESS') {
-		console.log('Error setting $LAZY boost reduction %:', result);
+	if (!logResult(result, '$LAZY Boost Reduction % update')) {
 		return;
 	}
 
-	console.log('$LAZY Boost %. Transaction ID:', result[2]?.transactionId?.toString());
-
+	// Set burn percentage
 	result = await contractExecuteFunction(
 		contractId,
 		boostManagerIface,
@@ -167,20 +95,7 @@ const main = async () => {
 		[burnPercentage],
 	);
 
-	if (result[0]?.status?.toString() != 'SUCCESS') {
-		console.log('Error setting $LAZY Burn %:', result);
-		return;
-	}
-
-	console.log('$LAZY Burn % set. Transaction ID:', result[2]?.transactionId?.toString());
+	logResult(result, '$LAZY Burn % update');
 };
 
-
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch(error => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

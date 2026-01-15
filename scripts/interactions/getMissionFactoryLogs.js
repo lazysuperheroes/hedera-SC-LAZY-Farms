@@ -1,73 +1,44 @@
-const {
-
-	AccountId,
-	ContractId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
+/**
+ * Get and optionally save logs from a MissionFactory contract
+ * Refactored to use shared utilities
+ */
 const fs = require('fs');
-const { ethers } = require('ethers');
-const readlineSync = require('readline-sync');
+const { ContractId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, confirmAction, runScript } = require('../../utils/scriptHelpers');
 const { getEventsFromMirror } = require('../../utils/hederaMirrorHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
-
-// Get operator from .env file
-let operatorId;
-try {
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'MissionFactory';
-
-const env = process.env.ENVIRONMENT ?? null;
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const { operatorId, env } = createHederaClient({ requireOperator: true });
 
-	const args = process.argv.slice(2);
-	if (args.length != 1 || getArgFlag('h')) {
-		console.log('Usage: getMissionFactoryLogs.js 0.0.MMMM');
-		console.log('       MMM is the mission address');
-		return;
-	}
+	const args = parseArgs(1, 'getMissionFactoryLogs.js 0.0.MMMM', ['MMM is the mission factory address']);
 
 	const contractId = ContractId.fromString(args[0]);
 
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
+	printHeader({
+		scriptName: 'Get MissionFactory Logs',
+		env,
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+	});
 
-	// import ABI
-	const missionJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
+	const missionFactoryIface = loadInterface('MissionFactory');
 
-	const missionIface = new ethers.Interface(missionJSON.abi);
+	// Fetch logs from mirror node
+	const logs = await getEventsFromMirror(env, contractId, missionFactoryIface);
 
-	// Call the function to fetch logs
-	const logs = await getEventsFromMirror(env, contractId, missionIface);
+	const writeToFile = confirmAction('Do you want to write logs to file?');
 
-	const proceed = readlineSync.keyInYNStrict('Do you want to write logs to file?');
-	if (!proceed) {
+	if (!writeToFile) {
 		if (logs) {
 			for (const log of logs) {
 				console.log(log);
 			}
 		}
-		else { console.log('ERROR: No logs found'); }
+		else {
+			console.log('ERROR: No logs found');
+		}
 		return;
 	}
 
@@ -75,21 +46,15 @@ const main = async () => {
 	const now = new Date();
 	const dateHour = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${now.getHours()}`;
 	const outputFile = `./logs/MissionFactory-logs-${contractId}-${dateHour}.txt`;
+
 	try {
 		fs.writeFileSync(outputFile, logs.join('\n'));
+		console.log(`Logs have been written to ${outputFile}`);
 	}
 	catch (err) {
 		console.error(err);
 		console.log('Error writing logs to file - check smart-contracts/logs directory exists');
 	}
-	console.log(`Logs have been written to ${outputFile}`);
 };
 
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch((error) => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

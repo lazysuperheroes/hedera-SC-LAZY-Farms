@@ -1,127 +1,44 @@
-const {
-	Client,
-	AccountId,
-	PrivateKey,
-	ContractId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
-const readlineSync = require('readline-sync');
+/**
+ * Unpause a mission (admin only)
+ * Refactored to use shared utilities
+ */
+const { ContractId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult } = require('../../utils/scriptHelpers');
 const { contractExecuteFunction } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
 const { getContractEVMAddress } = require('../../utils/hederaMirrorHelpers');
-
-// Get operator from .env file
-let operatorKey;
-let operatorId;
-try {
-	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'Mission';
-
-const env = process.env.ENVIRONMENT ?? null;
-let client;
+const { GAS } = require('../../utils/constants');
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorKey === undefined ||
-		operatorKey == null ||
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify PRIVATE_KEY & ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
 
-	if (env.toUpperCase() == 'TEST') {
-		client = Client.forTestnet();
-		console.log('testing in *TESTNET*');
-	}
-	else if (env.toUpperCase() == 'MAIN') {
-		client = Client.forMainnet();
-		console.log('testing in *MAINNET*');
-	}
-	else if (env.toUpperCase() == 'PREVIEW') {
-		client = Client.forPreviewnet();
-		console.log('testing in *PREVIEWNET*');
-	}
-	else if (env.toUpperCase() == 'LOCAL') {
-		const node = { '127.0.0.1:50211': new AccountId(3) };
-		client = Client.forNetwork(node).setMirrorNetwork('127.0.0.1:5600');
-		console.log('testing in *LOCAL*');
-	}
-	else {
-		console.log(
-			'ERROR: Must specify either MAIN or TEST or LOCAL as environment in .env file',
-		);
-		return;
-	}
-
-	client.setOperator(operatorId, operatorKey);
-
-	const args = process.argv.slice(2);
-	if (args.length != 1 || getArgFlag('h')) {
-		console.log('Usage: unpauseMission.js 0.0.MMMM');
-		console.log('		MMM is the mission address');
-		return;
-	}
+	const args = parseArgs(1, 'unpauseMission.js 0.0.MMMM', ['MMM is the mission address']);
 
 	const missionAsEVM = await getContractEVMAddress(env, args[0]);
 	const contractId = ContractId.fromEvmAddress(0, 0, missionAsEVM);
 
+	printHeader({
+		scriptName: 'Unpause Mission',
+		env,
+		operatorId: operatorId.toString(),
+		contractId: `${contractId.toString()} HAPI: ${args[0]}`,
+	});
 
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString(), 'HAPI:', args[0]);
+	const missionIface = loadInterface('Mission');
 
-	// import ABI
-	const missionJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
-
-	const missionIface = new ethers.Interface(missionJSON.abi);
-
-
-	const proceed = readlineSync.keyInYNStrict('Do you want to unpause the mission?');
-	if (!proceed) {
-		console.log('User Aborted');
-		return;
-	}
+	confirmOrExit('Do you want to unpause the mission?');
 
 	const result = await contractExecuteFunction(
 		contractId,
 		missionIface,
 		client,
-		800_000,
+		GAS.CONTRACT_DEPLOY,
 		'updatePauseStatus',
 		[false],
 	);
 
-	if (result[0]?.status?.toString() != 'SUCCESS') {
-		console.log('Error pausing:', result);
-		return;
-	}
-
-	console.log('Paused. Transaction ID:', result[2]?.transactionId?.toString());
+	logResult(result, 'Mission Unpaused');
 };
 
-
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch(error => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

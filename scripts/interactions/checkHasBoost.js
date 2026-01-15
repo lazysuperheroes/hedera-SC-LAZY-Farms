@@ -1,75 +1,46 @@
-const {
-	AccountId,
-	ContractId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
+/**
+ * Check if user has boost for a mission via BoostManager
+ * Refactored to use shared utilities
+ */
+const { AccountId, ContractId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript } = require('../../utils/scriptHelpers');
 const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
 const { getContractEVMAddress } = require('../../utils/hederaMirrorHelpers');
 
-// Get operator from .env file
-let operatorId;
-try {
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'BoostManager';
-
-const env = process.env.ENVIRONMENT ?? null;
-
 const main = async () => {
-	// configure the client object
-	if (
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const { operatorId, env } = createHederaClient({ requireOperator: true });
 
-	const args = process.argv.slice(2);
-	if (args.length != 3 || getArgFlag('h')) {
-		console.log('Usage: checkHasBoost.js 0.0.BBB 0.0.UUU 0.0.MMM');
-		console.log('       BBB is the BoostManager address');
-		console.log('       UUU is the user address');
-		console.log('       MMM is the mission address');
-		return;
-	}
+	const args = parseArgs(3, 'checkHasBoost.js 0.0.BBB 0.0.UUU 0.0.MMM', [
+		'BBB is the BoostManager address',
+		'UUU is the user address',
+		'MMM is the mission address',
+	]);
 
 	const contractId = ContractId.fromString(args[0]);
 	const userAddress = AccountId.fromString(args[1]);
 	const missionAddressEVM = await getContractEVMAddress(env, args[2]);
 	const missionAddress = ContractId.fromEvmAddress(0, 0, missionAddressEVM);
 
+	printHeader({
+		scriptName: 'Check Has Boost',
+		env,
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+		additionalInfo: {
+			'User': userAddress.toString(),
+			'Mission': missionAddress.toString(),
+		},
+	});
 
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-	console.log('\n-Checking User:', userAddress.toString());
-	console.log('\n-Checking Mission:', missionAddress.toString());
+	const boostManagerIface = loadInterface('BoostManager');
 
-	// import ABI
-	const boostManagerJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
-
-	const boostManagerIface = new ethers.Interface(boostManagerJSON.abi);
-
-	// query the EVM via mirror node (readOnlyEVMFromMirrorNode)
-
-	const encodedCommand = boostManagerIface.encodeFunctionData(
-		'hasBoost',
-		[userAddress.toSolidityAddress(), missionAddress.toSolidityAddress()],
-	);
+	// Query hasBoost
+	const encodedCommand = boostManagerIface.encodeFunctionData('hasBoost', [
+		userAddress.toSolidityAddress(),
+		missionAddress.toSolidityAddress(),
+	]);
 
 	const result = await readOnlyEVMFromMirrorNode(
 		env,
@@ -79,19 +50,8 @@ const main = async () => {
 		false,
 	);
 
-	const boostDetails = boostManagerIface.decodeFunctionResult(
-		'hasBoost',
-		result,
-	);
+	const boostDetails = boostManagerIface.decodeFunctionResult('hasBoost', result);
 	console.log('Has Boost:', boostDetails);
-
 };
 
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch((error) => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

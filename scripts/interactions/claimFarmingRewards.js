@@ -1,137 +1,46 @@
-const {
-	Client,
-	AccountId,
-	PrivateKey,
-	ContractId,
-	TokenId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
-const readlineSync = require('readline-sync');
+/**
+ * Claim farming rewards and exit mission
+ * Refactored to use shared utilities
+ */
+const { ContractId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult } = require('../../utils/scriptHelpers');
 const { contractExecuteFunction, readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
 const { setHbarAllowance } = require('../../utils/hederaHelpers');
 const { checkHbarAllowances } = require('../../utils/hederaMirrorHelpers');
-
-// Get operator from .env file
-let operatorKey;
-let operatorId;
-let lazyTokenId;
-let boostManagerId;
-
-try {
-	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
-}
-
-try {
-	lazyTokenId = TokenId.fromString(process.env.LAZY_TOKEN_ID);
-	boostManagerId = AccountId.fromString(process.env.BOOST_MANAGER_CONTRACT_ID);
-}
-catch {
-	console.log('ERROR: Must specify LAZY_TOKEN_ID & BOOST_MANAGER_CONTRACT_ID in the .env file');
-}
-
-const contractName = 'Mission';
-
-const env = process.env.ENVIRONMENT ?? null;
-let client;
+const { GAS } = require('../../utils/constants');
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorKey === undefined ||
-		operatorKey == null ||
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify PRIVATE_KEY & ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const { client, operatorId, env } = createHederaClient({
+		requireOperator: true,
+		requireEnvVars: ['LAZY_TOKEN_ID', 'BOOST_MANAGER_CONTRACT_ID'],
+	});
 
-	// check Lazy and LGS are set
-	if (
-		lazyTokenId === undefined ||
-		lazyTokenId == null ||
-		boostManagerId === undefined ||
-		boostManagerId == null
-	) {
-		console.log(
-			'Environment required, please specify LAZY_TOKEN_ID & BOOST_MANAGER_CONTRACT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const boostManagerId = ContractId.fromString(process.env.BOOST_MANAGER_CONTRACT_ID);
 
-	if (env.toUpperCase() == 'TEST') {
-		client = Client.forTestnet();
-		console.log('testing in *TESTNET*');
-	}
-	else if (env.toUpperCase() == 'MAIN') {
-		client = Client.forMainnet();
-		console.log('testing in *MAINNET*');
-	}
-	else if (env.toUpperCase() == 'PREVIEW') {
-		client = Client.forPreviewnet();
-		console.log('testing in *PREVIEWNET*');
-	}
-	else if (env.toUpperCase() == 'LOCAL') {
-		const node = { '127.0.0.1:50211': new AccountId(3) };
-		client = Client.forNetwork(node).setMirrorNetwork('127.0.0.1:5600');
-		console.log('testing in *LOCAL*');
-	}
-	else {
-		console.log(
-			'ERROR: Must specify either MAIN or TEST or LOCAL as environment in .env file',
-		);
-		return;
-	}
-
-	client.setOperator(operatorId, operatorKey);
-
-	const args = process.argv.slice(2);
-	if (args.length != 3 || getArgFlag('h')) {
-		console.log('Usage: claimFarmingRewards.js 0.0.MMMM');
-		console.log('		MMM is the mission address');
-		return;
-	}
+	const args = parseArgs(1, 'claimFarmingRewards.js 0.0.MMMM', ['MMM is the mission address']);
 
 	const contractId = ContractId.fromString(args[0]);
 
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-
-	// import ABI
-	const missionJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
-
-	const missionIface = new ethers.Interface(missionJSON.abi);
-
-	// check the end time to ensure it is worth claiming
-	// using getUserEndAndBoost from mirror
-	const encodedCommand = missionIface.encodeFunctionData(
-		'getUserEndAndBoost',
-		[operatorId.toSolidityAddress()],
-	);
-
-	let result = await readOnlyEVMFromMirrorNode(
+	printHeader({
+		scriptName: 'Claim Farming Rewards',
 		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+	});
 
-	const userEndAndBoost = missionIface.decodeFunctionResult('getUserEndAndBoost', result);
+	const missionIface = loadInterface('Mission');
+
+	// Helper for mirror node queries
+	const query = async (fcnName, params = []) => {
+		const encoded = missionIface.encodeFunctionData(fcnName, params);
+		const result = await readOnlyEVMFromMirrorNode(env, contractId, encoded, operatorId, false);
+		return missionIface.decodeFunctionResult(fcnName, result);
+	};
+
+	// Check end time
+	const userEndAndBoost = await query('getUserEndAndBoost', [operatorId.toSolidityAddress()]);
 	const userEnd = Number(userEndAndBoost[0]);
 	const userBoost = Boolean(userEndAndBoost[1]);
 
@@ -143,121 +52,55 @@ const main = async () => {
 	}
 
 	console.log('Mission Completed - to withdraw you need an allowance to the Mission for hbar');
-
 	console.log('\nChecking Allowances...');
-	// check if the user has an hbar allowance to the mission
-	let found = false;
-	let boostFound = false;
-	const hbarAllowances = await checkHbarAllowances(client, operatorId);
-	hbarAllowances.forEach((allowance) => {
-		if (allowance.accountId.toString() == operatorId.toString()) {
-			found = true;
-		}
-		if (allowance.accountId.toString() == boostManagerId.toString()) {
-			boostFound = true;
-		}
-	});
 
-	if (!found) {
+	// Check HBAR allowances
+	const hbarAllowances = await checkHbarAllowances(env, operatorId);
+	let missionAllowance = hbarAllowances.some(a => a.spender === contractId.toString());
+	let boostAllowance = hbarAllowances.some(a => a.spender === boostManagerId.toString());
+
+	if (!missionAllowance) {
 		console.log('ERROR: Insufficient HBAR allowance to Mission');
-		const proceed = readlineSync.keyInYNStrict('Do you want to set the allowance?');
-		if (!proceed) {
-			console.log('User Aborted');
+		confirmOrExit('Do you want to set the allowance?');
+
+		const res = await setHbarAllowance(client, operatorId, contractId, 10);
+		if (res[0]?.status?.toString() !== 'SUCCESS') {
+			console.log('Error setting HBAR allowance:', res);
 			return;
 		}
-		// set allowance to the Gas Station for the fee
-		result = await setHbarAllowance(
-			client,
-			operatorId,
-			contractId,
-			10,
-		);
-
-		if (result[0]?.status?.toString() != 'SUCCESS') {
-			console.log('Error setting HBAR allowance to LGS:', result);
-			return;
-		}
-
 		console.log('ALLOWANCE SET: 10 Tinybar allowance to Mission');
 	}
 
+	// Check if boost requires additional allowance
 	if (userBoost) {
-		// check if the boost is via a Gem
-		// call getUsersBoostInfo form Mission
-		const boostCommand = missionIface.encodeFunctionData(
-			'getUsersBoostInfo',
-			[operatorId.toSolidityAddress()],
-		);
-
-		result = await readOnlyEVMFromMirrorNode(
-			env,
-			contractId,
-			boostCommand,
-			operatorId,
-			false,
-		);
-
-		const boostInfo = missionIface.decodeFunctionResult('getUsersBoostInfo', result);
+		const boostInfo = await query('getUsersBoostInfo', [operatorId.toSolidityAddress()]);
 		const boostType = Number(boostInfo[0]);
 
-		if (boostType == 2) {
-			console.log('Mission has a boost, you will need to have an allowance to the boost manager too');
-			if (!boostFound) {
-				console.log('ERROR: Insufficient HBAR allowance to Boost Manager');
-				const proceed = readlineSync.keyInYNStrict('Do you want to set the allowance?');
-				if (!proceed) {
-					console.log('User Aborted');
-					return;
-				}
-				// set allowance to the Gas Station for the fee
-				result = await setHbarAllowance(
-					client,
-					operatorId,
-					boostManagerId,
-					1,
-				);
+		if (boostType === 2 && !boostAllowance) {
+			console.log('Mission has a gem boost, you need an allowance to the boost manager');
+			confirmOrExit('Do you want to set the allowance?');
 
-				if (result[0]?.status?.toString() != 'SUCCESS') {
-					console.log('Error setting HBAR allowance to Boost Manager:', result);
-					return;
-				}
-
-				console.log('ALLOWANCE SET: 1 Tinybar allowance to Boost Manager');
+			const res = await setHbarAllowance(client, operatorId, boostManagerId, 1);
+			if (res[0]?.status?.toString() !== 'SUCCESS') {
+				console.log('Error setting HBAR allowance to Boost Manager:', res);
+				return;
 			}
+			console.log('ALLOWANCE SET: 1 Tinybar allowance to Boost Manager');
 		}
 	}
 
+	confirmOrExit('Do you want to claim rewards and exit the mission?');
 
-	const proceed = readlineSync.keyInYNStrict('Do you want to claim rewards and exit the mission?');
-	if (!proceed) {
-		console.log('User Aborted');
-		return;
-	}
-
-
-	result = await contractExecuteFunction(
+	const result = await contractExecuteFunction(
 		contractId,
 		missionIface,
 		client,
-		2_000_000,
+		GAS.MISSION_ENTER,
 		'claimRewards',
 		[],
 	);
 
-	if (result[0]?.status?.toString() != 'SUCCESS') {
-		console.log('Error claiming & exiting mission:', result);
-		return;
-	}
-
-	console.log('Rewards Claimed. Transaction ID:', result[2]?.transactionId?.toString());
+	logResult(result, 'Rewards Claimed');
 };
 
-
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch(error => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

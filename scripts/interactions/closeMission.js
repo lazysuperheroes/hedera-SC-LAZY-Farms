@@ -1,126 +1,42 @@
-const {
-	Client,
-	AccountId,
-	PrivateKey,
-	ContractId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
-const readlineSync = require('readline-sync');
+/**
+ * Close a mission (admin only)
+ * Refactored to use shared utilities
+ */
+const { ContractId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult } = require('../../utils/scriptHelpers');
 const { contractExecuteFunction } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
-
-// Get operator from .env file
-let operatorKey;
-let operatorId;
-try {
-	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'Mission';
-
-const env = process.env.ENVIRONMENT ?? null;
-let client;
+const { GAS } = require('../../utils/constants');
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorKey === undefined ||
-		operatorKey == null ||
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify PRIVATE_KEY & ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
 
-	if (env.toUpperCase() == 'TEST') {
-		client = Client.forTestnet();
-		console.log('testing in *TESTNET*');
-	}
-	else if (env.toUpperCase() == 'MAIN') {
-		client = Client.forMainnet();
-		console.log('testing in *MAINNET*');
-	}
-	else if (env.toUpperCase() == 'PREVIEW') {
-		client = Client.forPreviewnet();
-		console.log('testing in *PREVIEWNET*');
-	}
-	else if (env.toUpperCase() == 'LOCAL') {
-		const node = { '127.0.0.1:50211': new AccountId(3) };
-		client = Client.forNetwork(node).setMirrorNetwork('127.0.0.1:5600');
-		console.log('testing in *LOCAL*');
-	}
-	else {
-		console.log(
-			'ERROR: Must specify either MAIN or TEST or LOCAL as environment in .env file',
-		);
-		return;
-	}
-
-	client.setOperator(operatorId, operatorKey);
-
-	const args = process.argv.slice(2);
-	if (args.length != 1 || getArgFlag('h')) {
-		console.log('Usage: closeMission.js 0.0.MMMM');
-		console.log('       MMM is the mission address');
-		return;
-	}
+	const args = parseArgs(1, 'closeMission.js 0.0.MMMM', ['MMM is the mission address']);
 
 	const contractId = ContractId.fromString(args[0]);
 
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
+	printHeader({
+		scriptName: 'Close Mission',
+		env,
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+	});
 
-	// Import ABI
-	// import ABI
-	const missionJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
+	const missionIface = loadInterface('Mission');
 
-	const missionIface = new ethers.Interface(missionJSON.abi);
+	confirmOrExit('Do you want to close the mission?');
 
-
-	const proceed = readlineSync.keyInYNStrict('Do you want to close the mission?');
-	if (!proceed) {
-		console.log('User Aborted');
-		return;
-	}
-
-	const closeMissionTx = await contractExecuteFunction(
-		client,
+	const result = await contractExecuteFunction(
 		contractId,
 		missionIface,
-		1_200_000,
+		client,
+		GAS.MISSION_LEAVE,
 		'closeMission',
 		[],
 	);
 
-	if (closeMissionTx[0]?.status?.toString() != 'SUCCESS') {
-		console.log('Error adding reward serials:', closeMissionTx);
-		return;
-	}
-
-	console.log('Added Reward Serials. Transaction ID:', closeMissionTx[2]?.transactionId?.toString());
-
+	logResult(result, 'Mission Closed');
 };
 
-
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch(error => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

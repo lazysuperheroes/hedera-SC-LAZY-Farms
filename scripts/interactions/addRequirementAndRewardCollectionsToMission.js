@@ -1,233 +1,108 @@
-const {
-	Client,
-	AccountId,
-	PrivateKey,
-	ContractId,
-	TokenId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
-const readlineSync = require('readline-sync');
+/**
+ * Add requirement and reward collections to a Mission contract
+ * Refactored to use shared utilities
+ */
+const { ContractId, TokenId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList } = require('../../utils/scriptHelpers');
 const { contractExecuteFunction, readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
-
-// Get operator from .env file
-let operatorKey;
-let operatorId;
-try {
-	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'Mission';
-
-const env = process.env.ENVIRONMENT ?? null;
-
-let client;
+const { GAS } = require('../../utils/constants');
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorKey === undefined ||
-		operatorKey == null ||
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify PRIVATE_KEY & ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
 
-	if (env.toUpperCase() == 'TEST') {
-		client = Client.forTestnet();
-		console.log('testing in *TESTNET*');
-	}
-	else if (env.toUpperCase() == 'MAIN') {
-		client = Client.forMainnet();
-		console.log('testing in *MAINNET*');
-	}
-	else if (env.toUpperCase() == 'PREVIEW') {
-		client = Client.forPreviewnet();
-		console.log('testing in *PREVIEWNET*');
-	}
-	else if (env.toUpperCase() == 'LOCAL') {
-		const node = { '127.0.0.1:50211': new AccountId(3) };
-		client = Client.forNetwork(node).setMirrorNetwork('127.0.0.1:5600');
-		console.log('testing in *LOCAL*');
-	}
-	else {
-		console.log(
-			'ERROR: Must specify either MAIN or TEST or LOCAL as environment in .env file',
-		);
-		return;
-	}
-
-	client.setOperator(operatorId, operatorKey);
-
-	const args = process.argv.slice(2);
-	if (args.length != 3 || getArgFlag('h')) {
-		console.log('Usage: addRequirementAndRewardCollectionsToMission.js 0.0.MMMM 0.0.Req1,0.0.Req2 0.0.Rew1,0.0.Rew2');
-		console.log('		MMM is the mission address');
-		console.log('		Req1, Req2 are the requirement collection addresses');
-		console.log('		Rew1, Rew2 are the reward collection addresses');
-		return;
-	}
+	const args = parseArgs(3, 'addRequirementAndRewardCollectionsToMission.js 0.0.MMMM 0.0.Req1,0.0.Req2 0.0.Rew1,0.0.Rew2', [
+		'MMMM is the mission address',
+		'Req1,Req2 are the requirement collection addresses (comma separated - no spaces)',
+		'Rew1,Rew2 are the reward collection addresses (comma separated - no spaces)',
+	]);
 
 	const contractId = ContractId.fromString(args[0]);
-	const requirementCollectionIds = args[1].split(',').map(id => TokenId.fromString(id));
-	const rewardCollectionIds = args[2].split(',').map(id => TokenId.fromString(id));
+	const requirementCollectionIds = parseCommaList(args[1]).map(id => TokenId.fromString(id));
+	const rewardCollectionIds = parseCommaList(args[2]).map(id => TokenId.fromString(id));
 
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-	console.log('\n-Using Requirement Collections:', requirementCollectionIds.map(id => id.toString()));
-	console.log('\n-Using Reward Collections:', rewardCollectionIds.map(id => id.toString()));
-
-	// get existing requirement and reward collections
-	let encodedCommand = missionIface.encodeFunctionData(
-		'getRewards',
-		[],
-	);
-
-	let result = await readOnlyEVMFromMirrorNode(
+	printHeader({
+		scriptName: 'Add Requirement & Reward Collections to Mission',
 		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+		additionalInfo: {
+			'Requirement Collections': requirementCollectionIds.map(id => id.toString()).join(', '),
+			'Reward Collections': rewardCollectionIds.map(id => id.toString()).join(', '),
+		},
+	});
 
-	let rewards = missionIface.decodeFunctionResult('getRewards', result);
+	const missionIface = loadInterface('Mission');
 
-	console.log('Available Rewards:');
+	// Helper for mirror node queries
+	const query = async (fcnName, params = []) => {
+		const encoded = missionIface.encodeFunctionData(fcnName, params);
+		const result = await readOnlyEVMFromMirrorNode(env, contractId, encoded, operatorId, false);
+		return missionIface.decodeFunctionResult(fcnName, result);
+	};
+
+	// Display current rewards
+	const rewards = await query('getRewards');
+	console.log('\nCurrent Rewards:');
 	for (let i = 0; i < rewards[0].length; i++) {
-		console.log(`\tToken: ${TokenId.fromSolidityAddress(rewards[0][i])}`);
-		console.log('\t\tSerials:', rewards[1][i].map(s => Number(s)).join(', '));
-
+		console.log(`  Token: ${TokenId.fromSolidityAddress(rewards[0][i])}`);
+		console.log(`    Serials: ${rewards[1][i].map(s => Number(s)).join(', ')}`);
 	}
 
-	encodedCommand = missionIface.encodeFunctionData(
-		'getRequirements',
-		[],
-	);
-
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	let requirements = missionIface.decodeFunctionResult('getRequirements', result);
-
-	console.log('Allowed Entry Collateral:');
-
+	// Display current requirements
+	const requirements = await query('getRequirements');
+	console.log('\nCurrent Requirements (Entry Collateral):');
 	for (let i = 0; i < requirements[0].length; i++) {
-		console.log(`\tToken: ${TokenId.fromSolidityAddress(requirements[0][i])}`);
+		console.log(`  Token: ${TokenId.fromSolidityAddress(requirements[0][i])}`);
 		const serialLock = Boolean(requirements[1][i]);
 		if (serialLock) {
-			console.log('\t\tOnly Serials:', requirements[2][i].map(s => Number(s)).join(', '));
+			console.log(`    Only Serials: ${requirements[2][i].map(s => Number(s)).join(', ')}`);
 		}
 		else {
-			console.log('\t\tAll Serials');
+			console.log('    All Serials');
 		}
 	}
 
-	// import ABI
-	const missionJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
+	confirmOrExit('\nDo you want to add these requirement/reward collections to the mission?');
 
-	const missionIface = new ethers.Interface(missionJSON.abi);
-
-	const proceed = readlineSync.keyInYNStrict('Do you want to add reward/requirement collections to the mission?');
-	if (!proceed) {
-		console.log('User Aborted');
-		return;
-	}
-
-
-	result = await contractExecuteFunction(
+	const result = await contractExecuteFunction(
 		contractId,
 		missionIface,
 		client,
-		2_000_000,
+		GAS.ADMIN_CALL * 2 + (requirementCollectionIds.length + rewardCollectionIds.length) * 500_000,
 		'addRequirementAndRewardCollections',
-		[requirementCollectionIds.map(id => id.toSolidityAddress()), rewardCollectionIds.map(id => id.toSolidityAddress())],
+		[
+			requirementCollectionIds.map(id => id.toSolidityAddress()),
+			rewardCollectionIds.map(id => id.toSolidityAddress()),
+		],
 	);
 
-	if (result[0]?.status?.toString() != 'SUCCESS') {
-		console.log('Error adding requirement & reward collections:', result);
+	if (!logResult(result, 'Collections Added')) {
 		return;
 	}
 
-	console.log('Collections added. Transaction ID:', result[2]?.transactionId?.toString());
-
-	encodedCommand = missionIface.encodeFunctionData(
-		'getRewards',
-		[],
-	);
-
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	rewards = missionIface.decodeFunctionResult('getRewards', result);
-
-	console.log('Available Rewards:');
-	for (let i = 0; i < rewards[0].length; i++) {
-		console.log(`\tToken: ${TokenId.fromSolidityAddress(rewards[0][i])}`);
-		console.log('\t\tSerials:', rewards[1][i].map(s => Number(s)).join(', '));
-
+	// Display updated rewards
+	const newRewards = await query('getRewards');
+	console.log('\nUpdated Rewards:');
+	for (let i = 0; i < newRewards[0].length; i++) {
+		console.log(`  Token: ${TokenId.fromSolidityAddress(newRewards[0][i])}`);
+		console.log(`    Serials: ${newRewards[1][i].map(s => Number(s)).join(', ')}`);
 	}
 
-	encodedCommand = missionIface.encodeFunctionData(
-		'getRequirements',
-		[],
-	);
-
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	requirements = missionIface.decodeFunctionResult('getRequirements', result);
-
-	console.log('Allowed Entry Collateral:');
-
-	for (let i = 0; i < requirements[0].length; i++) {
-		console.log(`\tToken: ${TokenId.fromSolidityAddress(requirements[0][i])}`);
-		const serialLock = Boolean(requirements[1][i]);
+	// Display updated requirements
+	const newRequirements = await query('getRequirements');
+	console.log('\nUpdated Requirements (Entry Collateral):');
+	for (let i = 0; i < newRequirements[0].length; i++) {
+		console.log(`  Token: ${TokenId.fromSolidityAddress(newRequirements[0][i])}`);
+		const serialLock = Boolean(newRequirements[1][i]);
 		if (serialLock) {
-			console.log('\t\tOnly Serials:', requirements[2][i].map(s => Number(s)).join(', '));
+			console.log(`    Only Serials: ${newRequirements[2][i].map(s => Number(s)).join(', ')}`);
 		}
 		else {
-			console.log('\t\tAll Serials');
+			console.log('    All Serials');
 		}
 	}
 };
 
-
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch(error => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

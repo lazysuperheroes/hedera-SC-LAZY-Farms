@@ -7,7 +7,7 @@ pragma solidity >=0.8.12 <0.9.0;
 /// @notice This smart contract allows users to stake their assets (NFT/Token) depending on the
 /// remaining slots available. After a certain amount of time they will be able to claim the
 /// staking rewards.
-/// @dev requires FT for royalty handling currently
+/// @dev now uses hbar for royalty handling currently
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
@@ -29,7 +29,7 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
     using EnumerableSet for EnumerableSet.UintSet;
     using SafeCast for uint256;
 
-	error UsersOnMission();
+    error UsersOnMission();
 
     event FallbackEvent(address, address, string);
     event MissionCompleted(address indexed wallet, uint256 timestamp);
@@ -122,10 +122,14 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         uint8 _numberOfRewards
     ) external {
         require(!isInitialized, "Already initialized");
-		if (_missionDuration == 0 ||
-			_numberOfRewards == 0 ||
-			_numberOfRequirements == 0 || 
-			_missionCreator == address(0)) { revert BadArgument(); }
+        if (
+            _missionDuration == 0 ||
+            _numberOfRewards == 0 ||
+            _numberOfRequirements == 0 ||
+            _missionCreator == address(0)
+        ) {
+            revert BadArgument();
+        }
 
         isInitialized = true;
 
@@ -154,46 +158,59 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
             _numberOfRequirements
         );
 
-		addRequirementAndRewardCollections(_missionRequirements, _missionRewards);
+        addRequirementAndRewardCollections(
+            _missionRequirements,
+            _missionRewards
+        );
 
         isPaused = true;
     }
 
-	function addRequirementAndRewardCollections(
-		address[] memory _missionRequirements,
-		address[] memory _missionRewards
-	) public onlyAdminOrCreator {
-		if (activeParticipants != 0) { revert UsersOnMission(); }
-		//link each requirement to its token address
-		uint256 loopLength = _missionRequirements.length;
-        for (uint256 i = 0; i < loopLength;) {
+    function addRequirementAndRewardCollections(
+        address[] memory _missionRequirements,
+        address[] memory _missionRewards
+    ) public onlyAdminOrCreator {
+        if (activeParticipants != 0) {
+            revert UsersOnMission();
+        }
+        //link each requirement to its token address
+        uint256 loopLength = _missionRequirements.length;
+        for (uint256 i = 0; i < loopLength; ) {
             bool added = missionRequirementsSet.add(_missionRequirements[i]);
-			if (added) {
-				tokenAssociate(_missionRequirements[i]);
-			}
+            if (added) {
+                tokenAssociate(_missionRequirements[i]);
+            }
 
-			unchecked {	++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         //link each reward to its token address
-		loopLength = _missionRewards.length;
-        for (uint256 i = 0; i < loopLength;) {
+        loopLength = _missionRewards.length;
+        for (uint256 i = 0; i < loopLength; ) {
             bool added = missionRewardsUniverseSet.add(_missionRewards[i]);
-			if (added) {
-				tokenAssociate(_missionRewards[i]);
-			}
+            if (added) {
+                tokenAssociate(_missionRewards[i]);
+            }
 
-			unchecked {	++i; }
+            unchecked {
+                ++i;
+            }
         }
-	}
+    }
 
     //add serial numbers for requirements
     function addRequirementSerials(
         address _collectionAddress,
         uint256[] memory _serials
     ) external onlyAdminOrCreator {
-		if (!missionRequirementsSet.contains(_collectionAddress)) { revert BadArgument(); }
-		if (_serials.length == 0) { revert BadArgument(); }
+        if (!missionRequirementsSet.contains(_collectionAddress)) {
+            revert BadArgument();
+        }
+        if (_serials.length == 0) {
+            revert BadArgument();
+        }
 
         for (uint256 i = 0; i < _serials.length; i++) {
             missionRequirements[_collectionAddress].serials.add(_serials[i]);
@@ -206,8 +223,12 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         address _collectionAddress,
         uint256[] memory _serials
     ) external onlyAdminOrCreator {
-		if (!missionRequirementsSet.contains(_collectionAddress)) { revert BadArgument(); }
-		if (_serials.length == 0) { revert BadArgument(); }
+        if (!missionRequirementsSet.contains(_collectionAddress)) {
+            revert BadArgument();
+        }
+        if (_serials.length == 0) {
+            revert BadArgument();
+        }
 
         for (uint256 i = 0; i < _serials.length; i++) {
             missionRequirements[_collectionAddress].serials.remove(_serials[i]);
@@ -223,8 +244,12 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         address _collectionAddress,
         uint256[] memory _serials
     ) external {
-		if (!missionRewardsUniverseSet.contains(_collectionAddress)) { revert BadArgument(); }
-		if (_serials.length == 0) { revert BadArgument(); }
+        if (!missionRewardsUniverseSet.contains(_collectionAddress)) {
+            revert BadArgument();
+        }
+        if (_serials.length == 0) {
+            revert BadArgument();
+        }
         // not adding admin check, if someone else wants to add slots...fine?!
 
         for (uint256 i = 0; i < _serials.length; i++) {
@@ -612,7 +637,9 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
     // function to end mission and withdraw all remaining rewards
     // one-way function, once closed, cannot be reopened
     function closeMission() external onlyAdminOrCreator {
-		if (activeParticipants != 0) { revert UsersOnMission(); }
+        if (activeParticipants != 0) {
+            revert UsersOnMission();
+        }
 
         // lock down the mission
         missionState.lastEntryTimestamp = block.timestamp;
@@ -670,9 +697,15 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         address _collectionAddress,
         uint256[] memory _serials
     ) external onlyAdminOrCreator {
-        if (activeParticipants != 0) { revert UsersOnMission(); }
-		if (!missionRewardsUniverseSet.contains(_collectionAddress)) { revert BadArgument(); }
-		if (_serials.length == 0) { revert BadArgument(); }
+        if (activeParticipants != 0) {
+            revert UsersOnMission();
+        }
+        if (!missionRewardsUniverseSet.contains(_collectionAddress)) {
+            revert BadArgument();
+        }
+        if (_serials.length == 0) {
+            revert BadArgument();
+        }
 
         // if there are no rewards known to the contract then we do not need to run check logic.
         if (missionRewards[_collectionAddress].length != 0) {
@@ -800,7 +833,9 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         }
 
         // only allow hbar to be transferred when there are no active participants
-        if (activeParticipants != 0) { revert UsersOnMission(); }
+        if (activeParticipants != 0) {
+            revert UsersOnMission();
+        }
 
         Address.sendValue(receiverAddress, amount);
     }
@@ -809,7 +844,9 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         address _receiver,
         int64 _amount
     ) external onlyAdminOrCreator {
-        if (activeParticipants != 0) { revert UsersOnMission(); }
+        if (activeParticipants != 0) {
+            revert UsersOnMission();
+        }
         if (_receiver == address(0) || _amount == 0) {
             revert("Invalid address or amt");
         }

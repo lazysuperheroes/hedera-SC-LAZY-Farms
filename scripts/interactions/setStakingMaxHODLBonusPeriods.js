@@ -1,110 +1,43 @@
-const {
-	Client,
-	AccountId,
-	PrivateKey,
-	ContractId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
-const readlineSync = require('readline-sync');
+/**
+ * Set the max HODL bonus periods on LazyNFTStaking contract
+ * Refactored to use shared utilities
+ */
+const { ContractId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult } = require('../../utils/scriptHelpers');
 const { contractExecuteFunction, readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
-
-// Get operator from .env file
-let operatorKey;
-let operatorId;
-try {
-	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'LazyNFTStaking';
-
-const env = process.env.ENVIRONMENT ?? null;
-
-let client;
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorKey === undefined ||
-		operatorKey == null ||
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify PRIVATE_KEY & ACCOUNT_ID in the .env file',
-		);
+	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
+
+	const args = parseArgs(2, 'setStakingMaxHODLBonusPeriods.js 0.0.SSS <periods>', [
+		'0.0.SSS is the LazyNFTStaking contract to update',
+		'<periods> is the max periods for HODL bonus (default: 8)',
+	]);
+
+	const contractId = ContractId.fromString(args[0]);
+	const hodlPeriods = parseInt(args[1]);
+
+	if (hodlPeriods < 0) {
+		console.log('Invalid HODL Bonus Period:', hodlPeriods);
 		process.exit(1);
 	}
 
-	if (env.toUpperCase() == 'TEST') {
-		client = Client.forTestnet();
-		console.log('testing in *TESTNET*');
-	}
-	else if (env.toUpperCase() == 'MAIN') {
-		client = Client.forMainnet();
-		console.log('testing in *MAINNET*');
-	}
-	else if (env.toUpperCase() == 'PREVIEW') {
-		client = Client.forPreviewnet();
-		console.log('testing in *PREVIEWNET*');
-	}
-	else if (env.toUpperCase() == 'LOCAL') {
-		const node = { '127.0.0.1:50211': new AccountId(3) };
-		client = Client.forNetwork(node).setMirrorNetwork('127.0.0.1:5600');
-		console.log('testing in *LOCAL*');
-	}
-	else {
-		console.log(
-			'ERROR: Must specify either MAIN or TEST or LOCAL as environment in .env file',
-		);
-		return;
-	}
+	printHeader({
+		scriptName: 'Setting HODL Bonus Period Cap',
+		env,
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+		additionalInfo: {
+			'NEW HODL Bonus Period Cap': `${hodlPeriods} (default: 8)`,
+		},
+	});
 
-	client.setOperator(operatorId, operatorKey);
+	const lnsIface = loadInterface('LazyNFTStaking');
 
-	const args = process.argv.slice(2);
-	if (args.length != 2 || getArgFlag('h')) {
-		console.log('Usage: setStakingHODLBonusRate.js 0.0.SSS <periods>');
-		console.log('		0.0.SSS is the LazyNFTStaking contract to update');
-		console.log('		<periods> is the max periods for HODL bonus (default: 8)');
-		return;
-	}
-
-	const contractId = ContractId.fromString(args[0]);
-	const hodlRate = parseInt(args[1]);
-
-	if (hodlRate < 0) {
-		console.log('Invalid HODL Bonus Period:', hodlRate);
-		return;
-	}
-
-	console.log('\n-**SETTING HODL BONUS PERIOD CAP**');
-
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-	console.log('\n-NEW HODL Bonus Period Cap:', hodlRate, '(default: 8');
-
-	// import ABI
-	const lnsJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
-
-	const lnsIface = new ethers.Interface(lnsJSON.abi);
-
-	// get the old burnPercentage from mirror
-	const encodedCommand = lnsIface.encodeFunctionData(
-		'maxBonusTimePeriods',
-		[],
-	);
+	// Get the old maxBonusTimePeriods from mirror
+	const encodedCommand = lnsIface.encodeFunctionData('maxBonusTimePeriods', []);
 
 	const ohr = await readOnlyEVMFromMirrorNode(
 		env,
@@ -115,15 +48,9 @@ const main = async () => {
 
 	const oldHODLPeriodCap = lnsIface.decodeFunctionResult('maxBonusTimePeriods', ohr);
 
-	console.log('\n-Old HODL Period Cap:', oldHODLPeriodCap, '%');
+	console.log('\n-Old HODL Period Cap:', oldHODLPeriodCap[0].toString());
 
-
-	const proceed = readlineSync.keyInYNStrict('Do you want to update the HODL period Cap (default 8)?');
-	if (!proceed) {
-		console.log('User Aborted');
-		return;
-	}
-
+	confirmOrExit('Do you want to update the HODL period Cap (default 8)?');
 
 	const result = await contractExecuteFunction(
 		contractId,
@@ -131,24 +58,10 @@ const main = async () => {
 		client,
 		null,
 		'setMaxBonusTimePeriods',
-		[hodlRate],
+		[hodlPeriods],
 	);
 
-	if (result[0]?.status?.toString() != 'SUCCESS') {
-		console.log('Error setting HODL period cap:', result);
-		return;
-	}
-
-	console.log('HODL Period Cap updated. Transaction ID:', result[2]?.transactionId?.toString());
-
+	logResult(result, 'HODL Period Cap updated');
 };
 
-
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch(error => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

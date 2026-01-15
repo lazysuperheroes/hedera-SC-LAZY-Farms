@@ -1,140 +1,59 @@
-const {
-	AccountId,
-	ContractId,
-	TokenId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
+/**
+ * Check NFT delegation status via LazyDelegateRegistry
+ * Refactored to use shared utilities
+ */
+const { AccountId, ContractId, TokenId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript } = require('../../utils/scriptHelpers');
 const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
-
-// Get operator from .env file
-let operatorId;
-try {
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'LazyDelegateRegistry';
-
-const env = process.env.ENVIRONMENT ?? null;
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const { operatorId, env } = createHederaClient({ requireOperator: true });
 
-	const args = process.argv.slice(2);
-	if (args.length != 3 || getArgFlag('h')) {
-		console.log('Usage: checkDelegatedToForNFTSerial.js 0.0.LDR 0.0.TTT <serial>');
-		console.log('       LDR is the LazyDelegateRegistry address');
-		console.log('       TTT is the token address');
-		console.log('       serial is the serial number of the NFT to check');
-		return;
-	}
+	const args = parseArgs(3, 'checkDelegatedToForNFTSerial.js 0.0.LDR 0.0.TTT <serial>', [
+		'LDR is the LazyDelegateRegistry address',
+		'TTT is the token address',
+		'serial is the serial number of the NFT to check',
+	]);
 
 	const contractId = ContractId.fromString(args[0]);
 	const token = TokenId.fromString(args[1]);
-	const serial = parseInt(args[2]);
+	const serial = parseInt(args[2], 10);
 
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-	console.log('\n-Checking Tokens:', token.toString());
-	console.log('\n-Checking Serial:', serial);
-
-	// import ABI
-	const boostManagerJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
-
-	const boostManagerIface = new ethers.Interface(boostManagerJSON.abi);
-
-	// query the EVM via mirror node (readOnlyEVMFromMirrorNode)
-	const encodedCommand = boostManagerIface.encodeFunctionData(
-		'getNFTDelegatedTo',
-		[token.toSolidityAddress(), serial],
-	);
-
-	console.log(`Encoded Command: ${encodedCommand}`);
-
-	const result = await readOnlyEVMFromMirrorNode(
+	printHeader({
+		scriptName: 'Check Delegation',
 		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+		additionalInfo: {
+			'Token': token.toString(),
+			'Serial': serial,
+		},
+	});
 
-	const user = boostManagerIface.decodeFunctionResult(
-		'getNFTDelegatedTo',
-		result,
-	);
+	const ldrIface = loadInterface('LazyDelegateRegistry');
 
-	console.log(`NFT ${serial} is delegated to: ${AccountId.fromEvmAddress(0, 0, user[0]).toString()}`);
+	// Helper for mirror node queries
+	const query = async (fcnName, params = []) => {
+		const encoded = ldrIface.encodeFunctionData(fcnName, params);
+		const result = await readOnlyEVMFromMirrorNode(env, contractId, encoded, operatorId, false);
+		return ldrIface.decodeFunctionResult(fcnName, result);
+	};
 
-	// use getNFTsDelegatedTo to get all NFTs delegated to a user
-	const encodedCommand1 = boostManagerIface.encodeFunctionData(
-		'getNFTsDelegatedTo',
-		[user[0]],
-	);
+	// Get who the NFT is delegated to
+	const userResult = await query('getNFTDelegatedTo', [token.toSolidityAddress(), serial]);
+	const delegatedTo = AccountId.fromEvmAddress(0, 0, userResult[0]);
+	console.log(`NFT ${serial} is delegated to: ${delegatedTo.toString()}`);
 
-	const result1 = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand1,
-		operatorId,
-		false,
-	);
+	// Get all NFTs delegated to that user
+	const nftsResult = await query('getNFTsDelegatedTo', [userResult[0]]);
+	const nfts = nftsResult[0].map(n => TokenId.fromSolidityAddress(n).toString());
+	console.log(`NFTs delegated to ${delegatedTo.toString()}: ${nfts.join(', ')}`);
 
-
-	const nfts = boostManagerIface.decodeFunctionResult(
-		'getNFTsDelegatedTo',
-		result1,
-	);
-
-	console.log(`NFTs delegated to ${AccountId.fromEvmAddress(0, 0, user[0]).toString()}: ${nfts[0].map((n) => TokenId.fromSolidityAddress(n).toString()).join(', ')}`);
-
-	// check totalSerialsDelegated
-	const encodedCommand2 = boostManagerIface.encodeFunctionData(
-		'totalSerialsDelegated',
-		[],
-	);
-
-	const result2 = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand2,
-		operatorId,
-		false,
-	);
-
-	const totalSerialsDelegated = boostManagerIface.decodeFunctionResult(
-		'totalSerialsDelegated',
-		result2,
-	);
-
-	console.log(`(Global) Total Serials Delegated: ${totalSerialsDelegated}`);
-
+	// Get total serials delegated globally
+	const totalResult = await query('totalSerialsDelegated', []);
+	console.log(`(Global) Total Serials Delegated: ${totalResult[0]}`);
 };
 
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch((error) => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

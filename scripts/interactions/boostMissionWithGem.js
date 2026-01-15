@@ -1,86 +1,34 @@
-const {
-	Client,
-	AccountId,
-	PrivateKey,
-	ContractId,
-	TokenId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
-const readlineSync = require('readline-sync');
+/**
+ * Boost a mission using a Gem NFT
+ * The gem is returned when the user exits the mission
+ * Refactored to use shared utilities
+ */
+const { ContractId, TokenId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult } = require('../../utils/scriptHelpers');
 const { contractExecuteFunction, readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
-const { lookupLevel } = require('../../utils/LazyFarmingHelper');
 const { setNFTAllowanceAll } = require('../../utils/hederaHelpers');
 const { getContractEVMAddress } = require('../../utils/hederaMirrorHelpers');
+const { lookupLevel } = require('../../utils/LazyFarmingHelper');
+const { GAS } = require('../../utils/constants');
 
-// Get operator from .env file
-let operatorKey;
-let operatorId;
-try {
-	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
+/**
+ * Format time remaining for display
+ */
+function formatTimeRemaining(seconds) {
+	return `${seconds} seconds -> ${Math.floor(seconds / 60)} minutes -> ${Math.floor(seconds / 3600)} hours -> ${Math.floor(seconds / 86400)} days`;
 }
-catch {
-	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
-}
-
-const boostManagerName = 'BoostManager';
-const missionName = 'Mission';
-
-const env = process.env.ENVIRONMENT ?? null;
-let client;
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorKey === undefined ||
-		operatorKey == null ||
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify PRIVATE_KEY & ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
 
-	if (env.toUpperCase() == 'TEST') {
-		client = Client.forTestnet();
-		console.log('testing in *TESTNET*');
-	}
-	else if (env.toUpperCase() == 'MAIN') {
-		client = Client.forMainnet();
-		console.log('testing in *MAINNET*');
-	}
-	else if (env.toUpperCase() == 'PREVIEW') {
-		client = Client.forPreviewnet();
-		console.log('testing in *PREVIEWNET*');
-	}
-	else if (env.toUpperCase() == 'LOCAL') {
-		const node = { '127.0.0.1:50211': new AccountId(3) };
-		client = Client.forNetwork(node).setMirrorNetwork('127.0.0.1:5600');
-		console.log('testing in *LOCAL*');
-	}
-	else {
-		console.log(
-			'ERROR: Must specify either MAIN or TEST or LOCAL as environment in .env file',
-		);
-		return;
-	}
-
-	client.setOperator(operatorId, operatorKey);
-
-	const args = process.argv.slice(2);
-	if (args.length != 4 || getArgFlag('h')) {
-		console.log('Usage: boostMissionWithLazy.js 0.0.BBBB 0.0.MMMM 0.0.GGG <serial>');
-		console.log('		BBBB is the boost manager address');
-		console.log('		MMMM is the mission address');
-		console.log('		GGG is the collection address of the boost Gem');
-		console.log('		<serial> is the serial number of the NFT');
-		return;
-	}
+	const args = parseArgs(4, 'boostMissionWithGem.js 0.0.BBBB 0.0.MMMM 0.0.GGG <serial>', [
+		'BBBB is the boost manager address',
+		'MMMM is the mission address',
+		'GGG is the collection address of the boost Gem',
+		'<serial> is the serial number of the NFT',
+	]);
 
 	const contractId = ContractId.fromString(args[0]);
 	const missionAsEVM = await getContractEVMAddress(env, args[1]);
@@ -88,167 +36,104 @@ const main = async () => {
 	const gemId = TokenId.fromString(args[2]);
 	const serial = Number(args[3]);
 
-
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Boost Manager:', contractId.toString());
-	console.log('\n-Using Mission:', missionId.toString(), '->', args[1]);
-	console.log('\n-Using Gem:', gemId.toString());
-	console.log('\n-Using Serial:', serial);
-
-	// import ABI
-	const boostJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${boostManagerName}.sol/${boostManagerName}.json`,
-		),
-	);
-
-	const boostIface = new ethers.Interface(boostJSON.abi);
-
-	const missionJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${missionName}.sol/${missionName}.json`,
-		),
-	);
-
-	const missionIface = new ethers.Interface(missionJSON.abi);
-
-	// get current end time from Mission using getUserEndAndBoost via mirror node
-	let encodedCommand = missionIface.encodeFunctionData('getUserEndAndBoost', [operatorId.toSolidityAddress()]);
-	let result = await readOnlyEVMFromMirrorNode(
+	printHeader({
+		scriptName: 'Boost Mission with Gem NFT',
 		env,
-		missionId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+		additionalInfo: {
+			'Mission': `${missionId.toString()} -> ${args[1]}`,
+			'Gem': gemId.toString(),
+			'Serial': serial,
+		},
+	});
 
+	const boostIface = loadInterface('BoostManager');
+	const missionIface = loadInterface('Mission');
 
-	const currentEndAndBoost = missionIface.decodeFunctionResult('getUserEndAndBoost', result);
+	// Helper for mirror node queries
+	const queryBoost = async (fcnName, params = []) => {
+		const encoded = boostIface.encodeFunctionData(fcnName, params);
+		const result = await readOnlyEVMFromMirrorNode(env, contractId, encoded, operatorId, false);
+		return boostIface.decodeFunctionResult(fcnName, result);
+	};
 
+	const queryMission = async (fcnName, params = []) => {
+		const encoded = missionIface.encodeFunctionData(fcnName, params);
+		const result = await readOnlyEVMFromMirrorNode(env, missionId, encoded, operatorId, false);
+		return missionIface.decodeFunctionResult(fcnName, result);
+	};
+
+	// Get current end time and boost status from Mission
+	const currentEndAndBoost = await queryMission('getUserEndAndBoost', [operatorId.toSolidityAddress()]);
 	const currEndTimestamp = Number(currentEndAndBoost[0]);
-	if (currEndTimestamp == 0) {
-		console.log('User is not on this mission. Exiting...');
-		return;
-	}
-	else if (currEndTimestamp < Math.floor(Date.now() / 1000)) {
-		console.log('User has completed this mission. No need to Boost. Exiting...');
-		return;
+
+	if (currEndTimestamp === 0) {
+		console.log('ERROR: User is not on this mission. Exiting...');
+		process.exit(0);
 	}
 
-	console.log('User has Boosted:', Boolean(currentEndAndBoost[1]));
+	if (currEndTimestamp < Math.floor(Date.now() / 1000)) {
+		console.log('User has completed this mission. No need to Boost. Exiting...');
+		process.exit(0);
+	}
+
+	console.log('\nUser has Boosted:', Boolean(currentEndAndBoost[1]));
 
 	if (currentEndAndBoost[1]) {
-		console.log('exiting...');
-		return;
+		console.log('Already boosted, exiting...');
+		process.exit(0);
 	}
 
-
-	console.log('User current end:', currEndTimestamp, '->', new Date(currEndTimestamp * 1000).toISOString());
-	// show user time remaining
+	console.log('Current end:', currEndTimestamp, '->', new Date(currEndTimestamp * 1000).toISOString());
 	const timeRemaining = currEndTimestamp - Math.floor(Date.now() / 1000);
-	console.log('User time remaining:', timeRemaining, 'seconds ->', Math.floor(timeRemaining / 60), 'minutes ->', Math.floor(timeRemaining / 3600), 'hours ->', Math.floor(timeRemaining / 86400), 'days');
+	console.log('Time remaining:', formatTimeRemaining(timeRemaining));
 
-	// check the reduction via getBoostLevel
-	encodedCommand = boostIface.encodeFunctionData('getBoostLevel', [
-		gemId.toSolidityAddress(),
-		serial,
-	]);
+	// Check the gem boost level
+	const reduction = await queryBoost('getBoostLevel', [gemId.toSolidityAddress(), serial]);
+	console.log('\nGem Boost Level:', lookupLevel(Number(reduction[0])));
 
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
+	// Get boost data for the reduction percentage
+	const boostData = await queryBoost('getBoostData', [Number(reduction[0])]);
+	console.log('This boost reduces time remaining by:', Number(boostData[3]), '%');
 
-	const reduction = boostIface.decodeFunctionResult('getBoostLevel', result);
+	confirmOrExit('\nDo you want to Boost with Gem NFT (NFT returned on exit)?');
 
-	console.log('Gem is Boost level:', lookupLevel(Number(reduction[0])));
-
-	// use getBoostData for the level to find the reduction time
-	encodedCommand = boostIface.encodeFunctionData('getBoostData', [
-		Number(reduction[0]),
-	]);
-
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	const boostData = boostIface.decodeFunctionResult('getBoostData', result);
-
-	console.log('This boost reduces your time remaining by:', Number(boostData[3]), '%');
-
-
-	const proceed = readlineSync.keyInYNStrict('Do you want to Boost with Gem NFT (NFT returned on exit)?');
-	if (!proceed) {
-		console.log('User Aborted');
-		return;
-	}
-
-	// set NFT allowance to BoostManager
-	// set NFT allowance
-	result = await setNFTAllowanceAll(
+	// Set NFT allowance to BoostManager
+	let result = await setNFTAllowanceAll(
 		client,
 		[gemId],
 		operatorId,
 		contractId,
 	);
 
-	if (result != 'SUCCESS') {
+	if (result !== 'SUCCESS') {
 		console.log('Error setting NFT allowance:', result);
 		return;
 	}
 
+	// Execute boost
 	result = await contractExecuteFunction(
 		contractId,
 		boostIface,
 		client,
-		800_000,
+		GAS.BOOST_ACTIVATE + 300_000,
 		'boostWithGemCards',
 		[missionId.toSolidityAddress(), gemId.toSolidityAddress(), serial],
 	);
 
-	if (result[0]?.status?.toString() != 'SUCCESS') {
-		console.log('Error boosting:', result);
+	if (!logResult(result, 'Boosted!')) {
 		return;
 	}
 
-	console.log('Boosted!. Transaction ID:', result[2]?.transactionId?.toString());
-
-	// get current end time from Mission using getUserEndAndBoost via mirror node
-	encodedCommand = missionIface.encodeFunctionData('getUserEndAndBoost', [operatorId.toSolidityAddress()]);
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		missionId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	const newEndAndBoost = missionIface.decodeFunctionResult('getUserEndAndBoost', result);
-
-	console.log('User has Boosted:', Boolean(newEndAndBoost[1]));
+	// Get updated end time
+	const newEndAndBoost = await queryMission('getUserEndAndBoost', [operatorId.toSolidityAddress()]);
+	console.log('\nUser has Boosted:', Boolean(newEndAndBoost[1]));
 
 	const newEndTimestamp = Number(newEndAndBoost[0]);
-
-	console.log('User new end:', newEndTimestamp, '->', new Date(newEndTimestamp * 1000).toISOString());
-	// show user time remaining
+	console.log('New end:', newEndTimestamp, '->', new Date(newEndTimestamp * 1000).toISOString());
 	const newTimeRemaining = newEndTimestamp - Math.floor(Date.now() / 1000);
-	console.log('User time remaining:', newTimeRemaining, 'seconds ->', Math.floor(newTimeRemaining / 60), 'minutes ->', Math.floor(newTimeRemaining / 3600), 'hours ->', Math.floor(newTimeRemaining / 86400), 'days');
+	console.log('New time remaining:', formatTimeRemaining(newTimeRemaining));
 };
 
-
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch(error => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

@@ -13,3 +13,6 @@ artifacts
 *.key
 yarn.lock
 yarn.lock
+
+# Claude Code frameworks (exclude all)
+.claude/

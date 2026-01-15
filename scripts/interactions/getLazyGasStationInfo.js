@@ -1,124 +1,51 @@
-const {
-	AccountId,
-	ContractId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
+/**
+ * Get LazyGasStation contract information
+ * Refactored to use shared utilities
+ */
+const { AccountId, ContractId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript } = require('../../utils/scriptHelpers');
 const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
-
-// Get operator from .env file
-let operatorId;
-try {
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'LazyGasStation';
-
-const env = process.env.ENVIRONMENT ?? null;
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	// Initialize client and get environment
+	const { operatorId, env } = createHederaClient({ requireOperator: true });
 
-	const args = process.argv.slice(2);
-	if (args.length != 1 || getArgFlag('h')) {
-		console.log('Usage: getLazyGasStationInfo.js 0.0.LGS');
-		console.log('       LGS is the LazyGasStation address');
-		return;
-	}
+	// Parse arguments
+	const args = parseArgs(1, 'getLazyGasStationInfo.js 0.0.LGS', [
+		'LGS is the LazyGasStation address',
+	]);
 
 	const contractId = ContractId.fromString(args[0]);
 
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-
-	// import ABI
-	const lgsJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
-
-	const lgsIface = new ethers.Interface(lgsJSON.abi);
-
-	// query the EVM via mirror node (readOnlyEVMFromMirrorNode) to know
-	// 1) getAdmins
-
-	let encodedCommand = lgsIface.encodeFunctionData('getAdmins', []);
-
-	let result = await readOnlyEVMFromMirrorNode(
+	// Print header
+	printHeader({
+		scriptName: 'LazyGasStation Info',
 		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+	});
 
-	const admins = lgsIface.decodeFunctionResult(
-		'getAdmins',
-		result,
-	);
+	// Load contract interface
+	const lgsIface = loadInterface('LazyGasStation');
 
-	console.log('Admins:', admins[0].map((a) => AccountId.fromEvmAddress(0, 0, a).toString()).join(', '));
+	// Helper function for mirror node queries
+	const queryContract = async (fcnName, params = []) => {
+		const encodedCommand = lgsIface.encodeFunctionData(fcnName, params);
+		const result = await readOnlyEVMFromMirrorNode(env, contractId, encodedCommand, operatorId, false);
+		return lgsIface.decodeFunctionResult(fcnName, result);
+	};
 
-	// 2) getAuthorizers
+	// Query and display results
+	const admins = await queryContract('getAdmins');
+	console.log('Admins:', admins[0].map(a => AccountId.fromEvmAddress(0, 0, a).toString()).join(', '));
 
-	encodedCommand = lgsIface.encodeFunctionData('getAuthorizers', []);
+	const authorizers = await queryContract('getAuthorizers');
+	console.log('Authorizers:', authorizers[0].map(a => AccountId.fromEvmAddress(0, 0, a).toString()).join(', '));
 
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	const authorizers = lgsIface.decodeFunctionResult(
-		'getAuthorizers',
-		result,
-	);
-
-	console.log('Authorizers:', authorizers[0].map((a) => AccountId.fromEvmAddress(0, 0, a).toString()).join(', '));
-
-	// 3) getContractUsers
-
-	encodedCommand = lgsIface.encodeFunctionData('getContractUsers', []);
-
-	result = await readOnlyEVMFromMirrorNode(
-		env,
-		contractId,
-		encodedCommand,
-		operatorId,
-		false,
-	);
-
-	const contractUsers = lgsIface.decodeFunctionResult(
-		'getContractUsers',
-		result,
-	);
-
-	console.log('Contract Users:', contractUsers[0].map((a) => AccountId.fromEvmAddress(0, 0, a).toString()).join(', '));
+	const contractUsers = await queryContract('getContractUsers');
+	console.log('Contract Users:', contractUsers[0].map(a => AccountId.fromEvmAddress(0, 0, a).toString()).join(', '));
 };
 
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch((error) => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

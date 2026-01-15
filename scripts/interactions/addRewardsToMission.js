@@ -1,225 +1,19 @@
-const {
-	Client,
-	AccountId,
-	PrivateKey,
-	ContractId,
-	TokenId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
-const readlineSync = require('readline-sync');
+/**
+ * Add reward serials to a Mission contract
+ * Refactored to use shared utilities
+ */
+const { ContractId, TokenId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList } = require('../../utils/scriptHelpers');
 const { contractExecuteFunction } = require('../../utils/solidityHelpers');
 const { setNFTAllowanceAll } = require('../../utils/hederaHelpers');
 const { getSerialsOwned, getTokenDetails } = require('../../utils/hederaMirrorHelpers');
+const { GAS } = require('../../utils/constants');
 
-// Prompt for operator details if not found in .env file
-let operatorKey;
-let operatorId;
-const contractName = 'Mission';
-
-if (process.env.PRIVATE_KEY && process.env.ACCOUNT_ID) {
-	try {
-		operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
-		operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-	}
-	catch {
-		console.log('ERROR: Invalid PRIVATE_KEY or ACCOUNT_ID in the .env file.');
-		process.exit(1);
-	}
-}
-else {
-	console.log('Please enter your Hedera account details.');
-	const privateKeyInput = readlineSync.question('Enter your private key (ED25519 format): ');
-	const accountIdInput = readlineSync.question('Enter your account ID (e.g., 0.0.1234): ');
-
-	try {
-		operatorKey = PrivateKey.fromStringED25519(privateKeyInput);
-		operatorId = AccountId.fromString(accountIdInput);
-	}
-	catch {
-		console.log('ERROR: Invalid input for PRIVATE_KEY or ACCOUNT_ID.');
-		process.exit(1);
-	}
-}
-
-console.log('\n-Using Operator:', operatorId.toString());
-
-// Suggest ENVIRONMENT from process.env and allow user to confirm or enter a new value
-let env = process.env.ENVIRONMENT;
-const suggestedEnv = env ? ` (${env})` : '';
-env = readlineSync.question(`Enter the environment you are using (TEST, MAIN, PREVIEW, LOCAL)${suggestedEnv}: `) || env;
-
-if (!env) {
-	console.log('ERROR: Environment is required. Please specify TEST, MAIN, PREVIEW, or LOCAL.');
-	process.exit(1);
-}
-
-let client;
-
-if (env.toUpperCase() == 'TEST') {
-	client = Client.forTestnet();
-	console.log('testing in *TESTNET*');
-}
-else if (env.toUpperCase() == 'MAIN') {
-	client = Client.forMainnet();
-	console.log('running in *MAINNET*');
-}
-else if (env.toUpperCase() == 'PREVIEW') {
-	client = Client.forPreviewnet();
-	console.log('testing in *PREVIEWNET*');
-}
-else if (env.toUpperCase() == 'LOCAL') {
-	const node = { '127.0.0.1:50211': new AccountId(3) };
-	client = Client.forNetwork(node).setMirrorNetwork('127.0.0.1:5600');
-	console.log('testing in *LOCAL*');
-}
-else {
-	console.log(
-		'ERROR: Must specify either MAIN or TEST or LOCAL as environment in .env file',
-	);
-	process.exit(1);
-}
-
-const main = async () => {
-
-	client.setOperator(operatorId, operatorKey);
-	console.log('-Using ENVIRONMENT:', env.toUpperCase());
-
-	// User inputs for contract ID, token ID, and serials
-	const contractIdInput = readlineSync.question('Enter the contract ID (e.g., 0.0.1234): ');
-	const tokenIdInput = readlineSync.question('Enter the token ID (e.g., 0.0.5678): ');
-
-	const contractId = ContractId.fromString(contractIdInput);
-	const tokenId = TokenId.fromString(tokenIdInput);
-
-	// check the token is correct via mirror node
-	const tokenInfo = await getTokenDetails(env, tokenId);
-	if (tokenInfo == null) {
-		console.log('Token not found:', tokenId.toString());
-		process.exit(0);
-	}
-
-	console.log('Token Info:', tokenInfo);
-
-	const confirmedToken = readlineSync.keyInYNStrict('Is this the correct token?');
-
-	if (!confirmedToken) {
-		console.log('User aborted.');
-		process.exit(0);
-	}
-
-	// get list of owned serials from mirror node for the token
-	let serialsList = await getSerialsOwned(env, operatorId, tokenId);
-
-	if (serialsList.length == 0) {
-		console.log('No serials found for the token.');
-		process.exit(0);
-	}
-	else if (serialsList.length < 50) {
-		console.log('Found:', serialsList.length, '\n\nserials:', serialsList);
-	}
-	else {
-		// loop the serials and capture the min and max
-		let minSerial = serialsList[0];
-		let maxSerial = serialsList[0];
-		serialsList.forEach(serial => {
-			if (serial < minSerial) {
-				minSerial = serial;
-			}
-			if (serial > maxSerial) {
-				maxSerial = serial;
-			}
-		});
-		console.log('Found:', serialsList.length, 'range:', minSerial, 'to', maxSerial);
-	}
-
-	const randomSerials = readlineSync.keyInYNStrict('Do you want to add random serials?');
-
-	let serials = [];
-
-	if (randomSerials) {
-		const numberOfSerials = readlineSync.questionInt('Enter the number of serials to add: ');
-		const serialRange = readlineSync.keyInYNStrict('Do you want to pick within a range?: ');
-
-		if (serialRange) {
-			const selectSerials = [];
-			const startSerial = readlineSync.questionInt('Enter the start serial: ');
-			const endSerial = readlineSync.questionInt('Enter the end serial: ');
-
-			for (let i = 0; i < serialsList.length; i++) {
-				if (serialsList[i] >= startSerial && serialsList[i] <= endSerial) {
-					selectSerials.push(serialsList[i]);
-				}
-			}
-			serialsList = selectSerials;
-		}
-
-		if (numberOfSerials > serialsList.length) {
-			console.log('Not enough serials to pick from.\n\nRequired:', numberOfSerials, 'Available:', serialsList.length);
-			console.log('serials:', serialsList);
-			process.exit(0);
-		}
-
-		// run the shuffle multiple times to randomize the serials
-		serialsList = shuffleArray(serialsList);
-		serialsList = shuffleArray(serialsList);
-		serialsList = shuffleArray(serialsList);
-		serialsList = shuffleArray(serialsList);
-
-		serials = serialsList.slice(0, numberOfSerials);
-	}
-	else {
-		const serialsInput = readlineSync.question('Enter the list of serials to add (comma-separated, e.g., 1,2,5): ');
-		serials = serialsInput.split(',').map(s => parseInt(s, 10));
-	}
-
-	console.log('\n-Using Contract:', contractId.toString());
-	console.log('-Using Token:', tokenId.toString());
-	console.log('-Using Serials:', serials);
-
-	// Import ABI
-	const missionJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
-
-	const missionIface = new ethers.Interface(missionJSON.abi);
-
-	const proceed = readlineSync.keyInYNStrict('Do you want to add collateral to the mission?');
-	if (!proceed) {
-		console.log('User aborted.');
-		process.exit(0);
-	}
-
-	let result = await setNFTAllowanceAll(
-		client,
-		[tokenId],
-		operatorId,
-		contractId,
-	);
-
-	// Push the reward(s) up
-	result = await contractExecuteFunction(
-		contractId,
-		missionIface,
-		client,
-		1_200_000,
-		'addRewardSerials',
-		[tokenId.toSolidityAddress(), serials],
-	);
-
-	if (result[0]?.status?.toString() != 'SUCCESS') {
-		console.log('Error adding reward serials:', result);
-		return;
-	}
-
-	console.log('Added Reward Serials. Transaction ID:', result[2]?.transactionId?.toString());
-
-	process.exit(0);
-};
-
+/**
+ * Shuffle an array using Fisher-Yates algorithm
+ */
 function shuffleArray(arr) {
 	for (let i = arr.length - 1; i > 0; i--) {
 		const j = Math.floor(Math.random() * (i + 1));
@@ -228,11 +22,130 @@ function shuffleArray(arr) {
 	return arr;
 }
 
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch(error => {
-		console.error(error);
+const main = async () => {
+	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
+
+	const args = parseArgs(3, 'addRewardsToMission.js <missionId> <tokenId> <serials>', [
+		'<missionId> - Mission contract ID (e.g., 0.0.12345)',
+		'<tokenId> - NFT token ID to add as rewards (e.g., 0.0.5678)',
+		'<serials> - Serial numbers to add, options:',
+		'    - Comma-separated list: 1,2,5,10',
+		'    - "random:N" to pick N random serials from owned',
+		'    - "random:N:start-end" to pick N random from range (e.g., random:10:1-100)',
+		'    - "all" to add all owned serials',
+	]);
+
+	const contractId = ContractId.fromString(args[0]);
+	const tokenId = TokenId.fromString(args[1]);
+	const serialsArg = args[2];
+
+	// Get token info from mirror node
+	const tokenInfo = await getTokenDetails(env, tokenId);
+	if (!tokenInfo) {
+		console.log('ERROR: Token not found:', tokenId.toString());
 		process.exit(1);
+	}
+
+	console.log('Token Info:', tokenInfo.name, `(${tokenInfo.symbol})`);
+
+	// Get list of owned serials from mirror node
+	let ownedSerials = await getSerialsOwned(env, operatorId, tokenId);
+
+	if (ownedSerials.length === 0) {
+		console.log('ERROR: No serials found for token', tokenId.toString());
+		process.exit(1);
+	}
+
+	console.log('Total owned serials:', ownedSerials.length);
+	if (ownedSerials.length <= 50) {
+		console.log('Owned serials:', ownedSerials.join(', '));
+	}
+	else {
+		const minSerial = Math.min(...ownedSerials);
+		const maxSerial = Math.max(...ownedSerials);
+		console.log(`Serial range: ${minSerial} to ${maxSerial}`);
+	}
+
+	// Parse serials argument
+	let serials = [];
+	if (serialsArg === 'all') {
+		serials = ownedSerials;
+	}
+	else if (serialsArg.startsWith('random:')) {
+		const parts = serialsArg.split(':');
+		const count = parseInt(parts[1]);
+
+		// Apply range filter if specified
+		if (parts[2]) {
+			const [start, end] = parts[2].split('-').map(n => parseInt(n));
+			ownedSerials = ownedSerials.filter(s => s >= start && s <= end);
+			console.log(`Filtered to range ${start}-${end}: ${ownedSerials.length} serials`);
+		}
+
+		if (count > ownedSerials.length) {
+			console.log(`ERROR: Requested ${count} serials but only ${ownedSerials.length} available`);
+			process.exit(1);
+		}
+
+		// Shuffle multiple times for better randomization
+		ownedSerials = shuffleArray(ownedSerials);
+		ownedSerials = shuffleArray(ownedSerials);
+		ownedSerials = shuffleArray(ownedSerials);
+		ownedSerials = shuffleArray(ownedSerials);
+
+		serials = ownedSerials.slice(0, count);
+	}
+	else {
+		serials = parseCommaList(serialsArg).map(s => parseInt(s, 10));
+
+		// Validate all serials are owned
+		const notOwned = serials.filter(s => !ownedSerials.includes(s));
+		if (notOwned.length > 0) {
+			console.log('ERROR: The following serials are not owned:', notOwned.join(', '));
+			process.exit(1);
+		}
+	}
+
+	printHeader({
+		scriptName: 'Add Rewards to Mission',
+		env,
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+		additionalInfo: {
+			'Token': `${tokenId.toString()} - ${tokenInfo.name} (${tokenInfo.symbol})`,
+			'Serials Count': serials.length,
+			'Serials': serials.length <= 50 ? serials.join(', ') : `${serials.slice(0, 20).join(', ')}... and ${serials.length - 20} more`,
+		},
 	});
+
+	const missionIface = loadInterface('Mission');
+
+	confirmOrExit('Do you want to add these reward serials to the mission?');
+
+	// Set NFT allowance
+	let result = await setNFTAllowanceAll(
+		client,
+		[tokenId],
+		operatorId,
+		contractId,
+	);
+
+	if (result !== 'SUCCESS') {
+		console.log('Error setting NFT allowance:', result);
+		return;
+	}
+
+	// Add rewards to mission
+	result = await contractExecuteFunction(
+		contractId,
+		missionIface,
+		client,
+		GAS.ADMIN_CALL + serials.length * 100_000,
+		'addRewardSerials',
+		[tokenId.toSolidityAddress(), serials],
+	);
+
+	logResult(result, 'Added Reward Serials');
+};
+
+runScript(main);

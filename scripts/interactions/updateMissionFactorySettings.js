@@ -1,154 +1,66 @@
-const {
-	Client,
-	AccountId,
-	PrivateKey,
-	ContractId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
+/**
+ * Update MissionFactory settings (boost manager, template, prng, lgs, lazy token)
+ * Refactored to use shared utilities
+ */
+const { AccountId, ContractId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, confirmOrExit, logResult, runScript } = require('../../utils/scriptHelpers');
 const { contractExecuteFunction } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
-const readlineSync = require('readline-sync');
 
-// Get operator from .env file
-let operatorKey;
-let operatorId;
-try {
-	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'MissionFactory';
-
-const env = process.env.ENVIRONMENT ?? null;
-
-let client;
-
+const SETTING_METHODS = {
+	boost: 'updateBoostManager',
+	template: 'updateMissionTemplate',
+	prng: 'updatePrngContract',
+	lgs: 'updateLGS',
+	lazy: 'setLazyToken',
+};
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorKey === undefined ||
-		operatorKey == null ||
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify PRIVATE_KEY & ACCOUNT_ID in the .env file',
-		);
+	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
+
+	const args = parseArgs(3, 'updateMissionFactorySettings.js 0.0.MMMM 0.0.AAAA [boost|template|prng|lgs|lazy]', [
+		'MMMM is the mission factory address',
+		'AAAA is the new address',
+		'boost|template|prng|lgs|lazy the item to update',
+	]);
+
+	const contractId = ContractId.fromString(args[0]);
+	const newAddress = AccountId.fromString(args[1]);
+	const setting = args[2].toLowerCase();
+
+	const method = SETTING_METHODS[setting];
+	if (!method) {
+		console.log('ERROR:', args[2], 'is not a valid setting. Use: boost, template, prng, lgs, or lazy.');
 		process.exit(1);
 	}
 
-	if (env.toUpperCase() == 'TEST') {
-		client = Client.forTestnet();
-		console.log('testing in *TESTNET*');
-	}
-	else if (env.toUpperCase() == 'MAIN') {
-		client = Client.forMainnet();
-		console.log('testing in *MAINNET*');
-	}
-	else if (env.toUpperCase() == 'PREVIEW') {
-		client = Client.forPreviewnet();
-		console.log('testing in *PREVIEWNET*');
-	}
-	else if (env.toUpperCase() == 'LOCAL') {
-		const node = { '127.0.0.1:50211': new AccountId(3) };
-		client = Client.forNetwork(node).setMirrorNetwork('127.0.0.1:5600');
-		console.log('testing in *LOCAL*');
-	}
-	else {
-		console.log(
-			'ERROR: Must specify either MAIN or TEST or LOCAL as environment in .env file',
-		);
-		return;
-	}
+	printHeader({
+		scriptName: 'Update MissionFactory Settings',
+		env,
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+		additionalInfo: {
+			'New Address': newAddress.toString(),
+			'Setting': setting,
+			'Method': method,
+		},
+	});
 
-	client.setOperator(operatorId, operatorKey);
+	confirmOrExit('Do you want to change settings?');
 
-	const args = process.argv.slice(2);
-	if (args.length != 3 || getArgFlag('h')) {
-		console.log('Usage: updateMissionFactorySettings.js 0.0.MMMM 0.0.AAAA [boost|template|prng|lgs|lazy]');
-		console.log('       MMMM is the mission factory address');
-		console.log('       AAAA is the new address');
-		console.log('       boost|template|prng|lgs|lazy the item to update');
-		return;
-	}
+	const missionFactoryIface = loadInterface('MissionFactory');
 
-	const contractId = ContractId.fromString(args[0]);
-	const adminAddress = AccountId.fromString(args[1]);
-	let method;
-	if (args[2].toLowerCase() == 'boost') {
-		method = 'updateBoostManager';
-	}
-	else if (args[2].toLowerCase() == 'template') {
-		method = 'updateMissionTemplate';
-	}
-	else if (args[2].toLowerCase() == 'prng') {
-		method = 'updatePrngContract';
-	}
-	else if (args[2].toLowerCase() == 'lgs') {
-		method = 'updateLGS';
-	}
-	else if (args[2].toLowerCase() == 'lazy') {
-		method = 'setLazyToken';
-	}
-	else {
-		console.log('Usage: updateMissionFactorySettings.js 0.0.MMMM 0.0.AAAA [boost|template|prng|lgs|lazy]');
-		console.log(args[2], 'is not a valid action');
-		return;
-	}
-
-
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-	console.log('\n-Proposed Admin:', adminAddress.toString());
-	console.log('\n-Action:', method);
-
-	const proceed = readlineSync.keyInYNStrict('Do you want to change settings?');
-	if (!proceed) {
-		console.log('User Aborted');
-		return;
-	}
-
-	// import ABI
-	const missionJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
-
-	const missionFactoryIface = new ethers.Interface(missionJSON.abi);
-
-	// deployMission
 	const result = await contractExecuteFunction(
 		contractId,
 		missionFactoryIface,
 		client,
 		null,
 		method,
-		[
-			adminAddress.toSolidityAddress(),
-		],
+		[newAddress.toSolidityAddress()],
 	);
 
-	if (result[0]?.status?.toString() != 'SUCCESS') {
-		console.error('ERROR: Transaction failed', result);
-		return;
-	}
-
-	console.log('Admin updated - Tx Id:', result[2].transactionId.toString());
-
+	logResult(result, 'Settings update');
 };
 
-
-main()
-	.then(() => process.exit(0))
-	.catch(error => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

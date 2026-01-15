@@ -1,7 +1,7 @@
 const ethers = require('ethers');
 const axios = require('axios');
 const dotenv = require('dotenv');
-const { ContractCallQuery, Client, TransactionRecordQuery, ContractExecuteTransaction, ContractCreateFlow } = require('@hashgraph/sdk');
+const { ContractCallQuery, Client, TransactionRecordQuery, ContractExecuteTransaction, ContractCreateFlow, AccountId, ContractId } = require('@hashgraph/sdk');
 const { getBaseURL } = require('./hederaMirrorHelpers');
 dotenv.config();
 
@@ -143,24 +143,44 @@ async function parseErrorTransactionId(envOrClient, transactionId, iface) {
 
 /**
  * @param {String} env
- * @param {ContractId} contractId
+ * @param {ContractId | string} contractId
  * @param {String} data command and parameters encoded as a string
- * @param {AccountId} from
+ * @param {AccountId | string} from
  * @param {Boolean} estimate gas estimate
  * @param {Number} gas gas limit
  * @returns {String} encoded result
  */
 async function readOnlyEVMFromMirrorNode(env, contractId, data, from, estimate = true, gas = 300_000) {
+
 	const baseUrl = getBaseURL(env);
+
+	// if from is an AccountId object convert it to a string using .toSolidityAddress()
+	if (from instanceof AccountId) {
+		from = from.toSolidityAddress();
+	}
+
+	// if contractId is a ContractId object convert it to a string using .toSolidityAddress()
+	if (contractId instanceof ContractId) {
+		contractId = contractId.toSolidityAddress();
+	}
+
+	// validate the ContractId and AccountId are EVM addresses using a regex
+	if (!contractId.match(/^(0x)?[0-9a-fA-F]{40}$/)) {
+		throw new Error(`Invalid contractId - must be a ContractId or EVM address [${contractId}]`);
+	}
+
+	if (!from.match(/^(0x)?[0-9a-fA-F]{40}$/)) {
+		throw new Error(`Invalid from Address - must be aan AccountId or EVM address [${from}]`);
+	}
 
 	const body = {
 		'block': 'latest',
 		'data': data,
 		'estimate': estimate,
-		'from': from.toSolidityAddress(),
+		'from': from,
 		'gas': gas,
 		'gasPrice': 100000000,
-		'to': contractId.toSolidityAddress(),
+		'to': contractId,
 		'value': 0,
 	};
 

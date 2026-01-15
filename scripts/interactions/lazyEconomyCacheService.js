@@ -1,13 +1,24 @@
-const {
-	ContractId,
-	AccountId,
-	TokenId,
-} = require('@hashgraph/sdk');
+/**
+ * Lazy Economy Cache Service
+ * Queries staking contract and stores results in Directus
+ * Refactored to use shared utilities
+ */
+const { ContractId, AccountId, TokenId } = require('@hashgraph/sdk');
 require('dotenv').config();
 const { ethers } = require('ethers');
 const { default: axios } = require('axios');
 const { createDirectus, rest, readItems, staticToken, updateItem, createItem } = require('@directus/sdk');
+const { parseArgs, runScript } = require('../../utils/scriptHelpers');
+const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
+const {
+	getBaseURL,
+	getTokenDetails,
+	checkMirrorBalance,
+	checkMirrorHbarBalance,
+	homebrewPopulateAccountNum,
+} = require('../../utils/hederaMirrorHelpers');
 
+// Configuration from environment
 let operatorId = process.env.ACCOUNT_ID ?? '0.0.888';
 let env = process.env.LAZY_STAKING_ENV ?? null;
 const cacheTable = process.env.LAZY_STAKING_CACHE_TABLE ?? 'LazyEconomyCache';
@@ -34,6 +45,8 @@ const TYPES = {
 	LARGEST_UNCLAIMED: 'LARGEST_UNCLAIMED',
 	MOST_CLAIMED: 'MOST_CLAIMED',
 };
+
+// ======================= Data Model Classes =======================
 
 class lazyEconomyTimeSeries {
 	constructor(burntSupply, ciculatingSupply, currentStakers, collectionsStaked = [], claimableLazy, lazyClaimed, nftsStaked, sctLazy, lgsLazy, treasuryLazy, mintLazy, gen1SalesHbar, lsvGen2SalesHbar, gen2RaffleHbar, gen1RoyaltyShare) {
@@ -96,7 +109,6 @@ class lazyEconomyTimeSeries {
 		for (const collection of this.collectionsStaked) {
 			rtnVal += collection.toString() + '\n';
 		}
-
 		return rtnVal;
 	}
 }
@@ -113,9 +125,7 @@ class lazyEconomyCache {
 	}
 
 	addCollection(collection) {
-		// if the collection is not already in the list add it, otherwise update the numStaked / supply
 		const existingCollection = this.collections.find(c => c.symbol == collection.symbol);
-
 		if (existingCollection) {
 			existingCollection.numStaked += collection.numStaked;
 			existingCollection.totalSupply += collection.totalSupply;
@@ -130,7 +140,6 @@ class lazyEconomyCache {
 	}
 
 	async toJSON() {
-		// convert collections and top25s to arrays of JSON
 		return {
 			stakingUsers: this.stakingUsers,
 			totalItemsStaked: this.totalItemsStaked,
@@ -170,7 +179,6 @@ class lazyEconomyCache {
 
 class nftCollection {
 	constructor(name, symbol, totalSupply, numStaked) {
-		// if name matches #XXX Jester then keep only Jester
 		const nameMatch = name.match(/#(\d+) (Jester)/);
 		if (nameMatch) {
 			name = nameMatch[2];
@@ -204,7 +212,6 @@ class top25User {
 
 	addUser(user, amount) {
 		if (this.userList.includes(user)) {
-			// update the amount
 			const userIndex = this.userList.findIndex(u => u.user == user);
 			this.userList[userIndex].amount += amount;
 			return;
@@ -216,28 +223,19 @@ class top25User {
 	}
 
 	async parseTop25() {
-		// sort by the amount field
-		// create a JSON string for each user in UserList
-		// format rank, user, amount
-
 		if (this.parsed) return;
 
 		const sortedList = this.userList.sort((a, b) => b.amount - a.amount);
-
-		// only keep the top 25
 		this.userList = sortedList.slice(0, 25);
 
-		// if any user starts with 0x then convert to AccountId
 		for (const user of this.userList) {
 			if (user.user.startsWith('0x')) {
-				// check the map for the user
 				if (evmToHederaAccountMap.has(user.user)) {
 					user.user = evmToHederaAccountMap.get(user.user);
 				}
 				else {
-					// convert the user to an AccountId
 					if (!supressLogs) console.log('INFO: Translating EVM address:', user.user);
-					const translatedUser = await homebrewPopulateAccountNum(user.user);
+					const translatedUser = await homebrewPopulateAccountNum(env, user.user);
 					if (!supressLogs) console.log('INFO: Got:', translatedUser, 'for EVM address:', user.user);
 					evmToHederaAccountMap.set(user.user, translatedUser);
 					user.user = translatedUser;
@@ -275,11 +273,12 @@ class top25User {
 
 		return rtnVal;
 	}
-
 }
 
-const main = async () => {
+// ======================= Main Logic =======================
 
+const main = async () => {
+	// Normalize environment
 	if (env.toUpperCase() == 'TEST' || env.toUpperCase() == 'TESTNET') {
 		env = 'testnet';
 		console.log('testing in *TESTNET*');
@@ -297,20 +296,15 @@ const main = async () => {
 		console.log('testing in *LOCAL*');
 	}
 	else {
-		console.log(
-			'ERROR: Must specify either MAIN or TEST or PREVIEW or LOCAL as environment in .env file',
-		);
+		console.log('ERROR: Must specify either MAIN or TEST or PREVIEW or LOCAL as environment in .env file');
 		return;
 	}
 
-	const args = process.argv.slice(2);
-	if ((args.length > 1) || getArgFlag('h')) {
-		console.log('Usage: lazyEconomyCacheService.js [0.0.LSC]');
-		console.log('       LSC is the Lazy Staking contract if not supplied will use LAZY_STAKING_CONTRACT_ID from the .env file');
-		return;
-	}
+	const args = parseArgs(0, 'lazyEconomyCacheService.js [0.0.LSC]', [
+		'LSC is the Lazy Staking contract if not supplied will use LAZY_STAKING_CONTRACT_ID from the .env file',
+	]);
 
-	// if an argument is passed use that as the contract id
+	// Use argument if provided, otherwise use env var
 	if (args.length == 0) {
 		lazyStakingContract = process.env.LAZY_STAKING_CONTRACT_ID ?? null;
 	}
@@ -323,84 +317,53 @@ const main = async () => {
 		return;
 	}
 
-	// validate environment is in set of allowed values [mainnet, testnet, previewnet, local]
 	if (!['mainnet', 'testnet', 'previewnet', 'local'].includes(env)) {
 		console.log('ERROR: Invalid environment provided');
 		return;
 	}
 
 	operatorId = AccountId.fromString(operatorId);
-
 	const contractId = ContractId.fromString(lazyStakingContract);
 
-	if (!supressLogs) console.log('\n-Using ENIVRONMENT:', env, 'operatorId:', operatorId.toString(), 'contractId:', contractId.toString());
+	if (!supressLogs) console.log('\n-Using ENVIRONMENT:', env, 'operatorId:', operatorId.toString(), 'contractId:', contractId.toString());
 
+	const lscIface = new ethers.Interface([
+		'function lazyToken() view returns (address)',
+		'function totalItemsStaked() view returns (uint256)',
+		'function getStakingUsers() view returns (address[] users)',
+		'function calculateRewards(address) view returns (uint256 lazyEarned, uint256 rewardRate, uint256 asOfTimestamp, uint256 lastClaimedTimestamp)',
+		'function getBaseRewardRate(address) view returns (uint256)',
+		'function getActiveBoostRate(address) view returns (uint256)',
+		'function getStakableCollections() view returns (address[] collections)',
+		'function getNumStakedNFTs(address) view returns (uint256)',
+		'event ClaimedRewards(address _user, uint256 _rewardAmount, uint256 _burnPercentage)',
+	]);
 
-	const lscIface = new ethers.Interface(
-		[
-			'function lazyToken() view returns (address)',
-			'function totalItemsStaked() view returns (uint256)',
-			'function getStakingUsers() view returns (address[] users)',
-			'function calculateRewards(address) view returns (uint256 lazyEarned, uint256 rewardRate, uint256 asOfTimestamp, uint256 lastClaimedTimestamp)',
-			'function getBaseRewardRate(address) view returns (uint256)',
-			'function getActiveBoostRate(address) view returns (uint256)',
-			'function getStakableCollections() view returns (address[] collections)',
-			'function getNumStakedNFTs(address) view returns (uint256)',
-			'event ClaimedRewards(address _user, uint256 _rewardAmount, uint256 _burnPercentage)',
-		],
-	);
+	// Helper for mirror node queries
+	const query = async (fcnName, params = []) => {
+		const encoded = lscIface.encodeFunctionData(fcnName, params);
+		const result = await readOnlyEVMFromMirrorNode(env, contractId, encoded, operatorId, false);
+		return lscIface.decodeFunctionResult(fcnName, result);
+	};
 
-	// query mirror nodes to call the following methods:
-	// call lazyToken method
-	let encodedCall = lscIface.encodeFunctionData('lazyToken', []);
-
-	let result = await readOnlyEVMFromMirrorNode(
-		contractId,
-		encodedCall,
-		operatorId,
-		false,
-	);
-
-	const lazyTokenEVM = lscIface.decodeFunctionResult('lazyToken', result);
-
+	// Get lazyToken
+	const lazyTokenEVM = await query('lazyToken');
 	const lazyToken = TokenId.fromSolidityAddress(lazyTokenEVM[0]);
 
-	// now get the details of the lazyToken from the mirror node
-	const lazyTokenDetails = await getTokenDetails(lazyToken);
-
+	// Get lazyToken details
+	const lazyTokenDetails = await getTokenDetails(env, lazyToken);
 	const lazyDecimals = lazyTokenDetails.decimals;
 
-	// totalItemsStaked
-	encodedCall = lscIface.encodeFunctionData('totalItemsStaked', []);
+	// Get totalItemsStaked
+	const totalItemsStaked = await query('totalItemsStaked');
 
-	result = await readOnlyEVMFromMirrorNode(
-		contractId,
-		encodedCall,
-		operatorId,
-		false,
-	);
-
-	const totalItemsStaked = lscIface.decodeFunctionResult(
-		'totalItemsStaked',
-		result,
-	);
-
-	// getStakingUsers
-	encodedCall = lscIface.encodeFunctionData('getStakingUsers', []);
-
-	result = await readOnlyEVMFromMirrorNode(
-		contractId,
-		encodedCall,
-		operatorId,
-		false,
-	);
-
-	const users = lscIface.decodeFunctionResult('getStakingUsers', result);
+	// Get stakingUsers
+	const users = await query('getStakingUsers');
 
 	let totalLazyEarned = 0;
 	let totalEarnRate = 0;
 
-	// build the top25 objects for each type
+	// Build the top25 objects for each type
 	const top25s = [
 		new top25User(TYPES.LONGEST_STAKED),
 		new top25User(TYPES.HIGHEST_DAILY_RATE),
@@ -412,51 +375,14 @@ const main = async () => {
 	const currentTimestamp = Math.floor(Date.now() / 1000);
 
 	for (const user of users[0]) {
-		encodedCall = lscIface.encodeFunctionData('calculateRewards', [user]);
-
-		result = await readOnlyEVMFromMirrorNode(
-			contractId,
-			encodedCall,
-			operatorId,
-			false,
-		);
-
-		const rewards = lscIface.decodeFunctionResult('calculateRewards', result);
-
-		// getActiveBoostRate for user
-		encodedCall = lscIface.encodeFunctionData('getActiveBoostRate', [user]);
-
-		const boostRateResult = await readOnlyEVMFromMirrorNode(
-			contractId,
-			encodedCall,
-			operatorId,
-			false,
-		);
-
-		const activeBoostRate = lscIface.decodeFunctionResult(
-			'getActiveBoostRate',
-			boostRateResult,
-		);
-
-		// getBaseRewardRate for user
-		encodedCall = lscIface.encodeFunctionData('getBaseRewardRate', [user]);
-
-		const baseRateResult = await readOnlyEVMFromMirrorNode(
-			contractId,
-			encodedCall,
-			operatorId,
-			false,
-		);
-
-		const baseRate = lscIface.decodeFunctionResult(
-			'getBaseRewardRate',
-			baseRateResult,
-		);
+		const rewards = await query('calculateRewards', [user]);
+		const activeBoostRate = await query('getActiveBoostRate', [user]);
+		const baseRate = await query('getBaseRewardRate', [user]);
 
 		totalLazyEarned += Number(rewards[0]);
 		totalEarnRate += Number(rewards[1]);
 
-		// add user to the top25s
+		// Add user to the top25s
 		top25s[0].addUser(user, currentTimestamp - Number(rewards[3]));
 		top25s[1].addUser(user, Number(rewards[1]));
 		top25s[2].addUser(user, Number(activeBoostRate));
@@ -480,20 +406,17 @@ const main = async () => {
 	}
 
 	console.log('INFO: Looking up staking events');
-	// get the claimed events
 	const lazyClaimedEvents = await getLazyClaimedViaEventsFromMirror(contractId, lscIface);
 
 	if (!supressLogs) console.log('INFO: Total claimed events:', lazyClaimedEvents.length);
 
 	let totalLazyClaimed = 0;
-	// convert to a map of user to total claimed
 	const userToClaimed = new Map();
 	lazyClaimedEvents.forEach(event => {
 		const user = event.user;
 		const rewardAmount = Number(event.rewardAmount) / 10 ** lazyDecimals;
 
 		top25s[4].addUser(user, rewardAmount);
-
 		totalLazyClaimed += rewardAmount;
 
 		const userTotalClaimed = userToClaimed.get(user) ?? 0;
@@ -518,47 +441,18 @@ const main = async () => {
 		console.log('Total Lazy Earned:', totalLazyEarned / 10 ** lazyDecimals, 'Total Earn Rate:', totalEarnRate / 10 ** lazyDecimals);
 	}
 
-	// getStakableCollections
-	encodedCall = lscIface.encodeFunctionData('getStakableCollections', []);
-
-	result = await readOnlyEVMFromMirrorNode(
-		contractId,
-		encodedCall,
-		operatorId,
-		false,
-	);
-
-	const collections = lscIface.decodeFunctionResult(
-		'getStakableCollections',
-		result,
-	);
-
-	// getNumStakedNFTs for each collection to see how many NFTs are staked
-	// get the TokenDetails and show % staked
+	// Get stakable collections
+	const collections = await query('getStakableCollections');
 
 	for (const collection of collections[0]) {
-		encodedCall = lscIface.encodeFunctionData('getNumStakedNFTs', [collection]);
-
-		result = await readOnlyEVMFromMirrorNode(
-			contractId,
-			encodedCall,
-			operatorId,
-			false,
-		);
-
-		const numStaked = lscIface.decodeFunctionResult('getNumStakedNFTs', result);
-
-		const collectionDetails = await getTokenDetails(
-			TokenId.fromSolidityAddress(collection),
-		);
+		const numStaked = await query('getNumStakedNFTs', [collection]);
+		const collectionDetails = await getTokenDetails(env, TokenId.fromSolidityAddress(collection));
 
 		lazyEconomyCacheObj.addCollection(new nftCollection(collectionDetails.name, collectionDetails.symbol, Number(collectionDetails.total_supply), Number(numStaked[0])));
 
 		if (!supressLogs) {
 			console.log(
-				`Collection: ${collectionDetails.name} [${
-					collectionDetails.symbol
-				}] has ${numStaked[0]} NFTs staked (${
+				`Collection: ${collectionDetails.name} [${collectionDetails.symbol}] has ${numStaked[0]} NFTs staked (${
 					((Number(numStaked[0]) / Number(collectionDetails.total_supply)) * 100).toFixed(2)
 				}%)`,
 			);
@@ -576,16 +470,16 @@ const main = async () => {
 		console.log(console.dir(outputAsJSON, { depth: 5 }));
 	}
 
-	// gather the rest of the data for the timeseries
-	const lgsLazy = await checkMirrorBalance(lgsId, lazyToken) / 10 ** lazyDecimals;
-	const sctLazy = await checkMirrorBalance(lsctId, lazyToken) / 10 ** lazyDecimals;
-	const treasuryLazy = await checkMirrorBalance(treasuryId, lazyToken) / 10 ** lazyDecimals;
-	const mintLazy = await checkMirrorBalance(mintId, lazyToken) / 10 ** lazyDecimals;
+	// Gather additional data for timeseries
+	const lgsLazy = await checkMirrorBalance(env, lgsId, lazyToken) / 10 ** lazyDecimals;
+	const sctLazy = await checkMirrorBalance(env, lsctId, lazyToken) / 10 ** lazyDecimals;
+	const treasuryLazy = await checkMirrorBalance(env, treasuryId, lazyToken) / 10 ** lazyDecimals;
+	const mintLazy = await checkMirrorBalance(env, mintId, lazyToken) / 10 ** lazyDecimals;
 
-	const gen1SalesHbar = await checkMirrorHbarBalance(gen1SalesId);
-	const lsvGen2SalesHbar = await checkMirrorHbarBalance(lsvGen2SalesId);
-	const gen2RaffleHbar = await checkMirrorHbarBalance(gen2RaffleId);
-	const gen1RoyaltyShare = await checkMirrorHbarBalance(gen1RoyaltyId);
+	const gen1SalesHbar = await checkMirrorHbarBalance(env, gen1SalesId) / 10 ** 8;
+	const lsvGen2SalesHbar = await checkMirrorHbarBalance(env, lsvGen2SalesId) / 10 ** 8;
+	const gen2RaffleHbar = await checkMirrorHbarBalance(env, gen2RaffleId) / 10 ** 8;
+	const gen1RoyaltyShare = await checkMirrorHbarBalance(env, gen1RoyaltyId) / 10 ** 8;
 
 	console.log('INFO: LGS $LAZY:', lgsLazy);
 	console.log('INFO: SCT $LAZY:', sctLazy);
@@ -629,6 +523,8 @@ const main = async () => {
 
 	await postTimeseriesToDirectus(timeseries);
 };
+
+// ======================= Directus Functions =======================
 
 async function postTimeseriesToDirectus(lazyEconomyTimeSeriesObj) {
 	try {
@@ -691,84 +587,16 @@ async function postLastestEconomyToDirectus(lazyEconomyCacheObj) {
 			totalEarnRate: lazyEconomyCacheObj.totalEarnRate,
 			collections: lazyEconomyCacheObj.getCollectionsAsJSON(),
 			top25s: await lazyEconomyCacheObj.getTop25sAsJSON(),
-		 }));
+		}));
 	}
 }
 
-/**
- * Get the token decimal form mirror
- * @param {TokenId|string} _tokenId
- * @returns {Object} details of the token
- */
-async function getTokenDetails(_tokenId) {
-	const tokenAsString = typeof _tokenId === 'string' ? _tokenId : _tokenId.toString();
-	const baseUrl = getBaseURL();
-	const url = `${baseUrl}/api/v1/tokens/${tokenAsString}`;
-	let rtnVal = null;
-	await axios.get(url)
-		.then((response) => {
-			const jsonResponse = response.data;
-			rtnVal = {
-				symbol: jsonResponse.symbol,
-				name: jsonResponse.name,
-				decimals: jsonResponse.decimals,
-				max_supply: jsonResponse.max_supply,
-				total_supply: jsonResponse.total_supply,
-				treasury_account_id: jsonResponse.treasury_account_id,
-				type: jsonResponse.type,
-			};
-		})
-		.catch(function(err) {
-			console.error(err);
-			return null;
-		});
-
-	return rtnVal;
-}
-
-/**
- * @param {ContractId} contractId
- * @param {String} data command and parameters encoded as a string
- * @param {AccountId | string} from
- * @param {Boolean} estimate gas estimate
- * @param {Number} gas gas limit
- * @returns {String} encoded result
- */
-async function readOnlyEVMFromMirrorNode(contractId, data, from, estimate = true, gas = 300_000) {
-	const baseUrl = getBaseURL();
-
-	// if from is a string convert it to an AccountId
-	if (typeof from === 'string') {
-		from = AccountId.fromString(from);
-	}
-
-	// if contractId is a string convert it to a ContractId
-	if (typeof contractId === 'string') {
-		contractId = ContractId.fromString(contractId);
-	}
-
-	const body = {
-		'block': 'latest',
-		'data': data,
-		'estimate': estimate,
-		'from': from.toSolidityAddress(),
-		'gas': gas,
-		'gasPrice': 100000000,
-		'to': contractId.toSolidityAddress(),
-		'value': 0,
-	};
-
-	const url = `${baseUrl}/api/v1/contracts/call`;
-
-	const response = await axios.post(url, body);
-
-	return response.data?.result;
-}
+// ======================= Helper Functions =======================
 
 async function getLazyClaimedViaEventsFromMirror(contractId, iface) {
-	const baseUrl = getBaseURL();
-
+	const baseUrl = getBaseURL(env);
 	let url = `${baseUrl}/api/v1/contracts/${contractId.toString()}/results/logs?order=asc&limit=100`;
+
 	if (!supressLogs) console.log('INFO: Fetching logs from:', url);
 
 	const claimEvents = [];
@@ -777,26 +605,17 @@ async function getLazyClaimedViaEventsFromMirror(contractId, iface) {
 		const response = await axios.get(url);
 		const jsonResponse = response.data;
 		jsonResponse.logs.forEach(log => {
-			// decode the event data
 			if (log.data == '0x') return;
 
 			const event = iface.parseLog({ topics: log.topics, data: log.data });
 			if (!event) return;
 
-			/**
-			 * event ClaimedRewards(
-					address _user,
-					uint256 _rewardAmount,
-					uint256 _burnPercentage
-				);
-			 */
-
-			switch (event.name) {
-			case 'ClaimedRewards':
-				claimEvents.push({ user: event.args._user, rewardAmount: Number(event.args._rewardAmount), burnPercentage: Number(event.args._burnPercentage) });
-				break;
-			default:
-				break;
+			if (event.name === 'ClaimedRewards') {
+				claimEvents.push({
+					user: event.args._user,
+					rewardAmount: Number(event.args._rewardAmount),
+					burnPercentage: Number(event.args._burnPercentage),
+				});
 			}
 		});
 
@@ -811,99 +630,4 @@ async function getLazyClaimedViaEventsFromMirror(contractId, iface) {
 	return claimEvents;
 }
 
-/**
- * Basic query of mirror node for token balance
- * @param {AccountId} _userId
- * @param {TokenId} _tokenId
- * @returns {Number} balance of the token
- */
-async function checkMirrorBalance(_userId, _tokenId) {
-	const baseUrl = getBaseURL();
-	const url = `${baseUrl}/api/v1/accounts/${_userId.toString()}/tokens?token.id=${_tokenId.toString()}`;
-
-	let rtnVal = null;
-	await axios.get(url)
-		.then((response) => {
-			const jsonResponse = response.data;
-
-			jsonResponse.tokens.forEach(token => {
-				if (token.token_id == _tokenId.toString()) {
-					// console.log(' -Mirror Node: Found balance for', _userId.toString(), 'of', token.balance, 'of token', token.token_id);
-					rtnVal = Number(token.balance);
-				}
-			});
-		})
-		.catch(function(err) {
-			console.error(err);
-			return null;
-		});
-
-	return rtnVal;
-}
-
-async function checkMirrorHbarBalance(_userId) {
-	const baseUrl = getBaseURL();
-	const url = `${baseUrl}/api/v1/accounts/${_userId.toString()}`;
-
-	let rtnVal = null;
-	await axios.get(url)
-		.then((response) => {
-			const jsonResponse = response.data;
-			rtnVal = Number(jsonResponse.balance.balance) / 10 ** 8;
-		})
-		.catch(function(err) {
-			console.error(err);
-			return null;
-		});
-
-	return rtnVal;
-}
-
-async function homebrewPopulateAccountNum(evmAddress) {
-	if (evmAddress === null) {
-		throw new Error('field `evmAddress` should not be null');
-	  }
-
-	  const mirrorUrl = getBaseURL();
-
-	  const url = `${mirrorUrl}/api/v1/accounts/${evmAddress}`;
-	  return (await axios.get(url)).data.account;
-}
-
-function getBaseURL() {
-	if (env.toLowerCase() == 'test' || env.toLowerCase() == 'testnet') {
-		return 'https://testnet.mirrornode.hedera.com';
-	}
-	else if (env.toLowerCase() == 'main' || env.toLowerCase() == 'mainnet') {
-		return 'https://mainnet-public.mirrornode.hedera.com';
-	}
-	else if (env.toLowerCase() == 'preview' || env.toLowerCase() == 'previewnet') {
-		return 'https://previewnet.mirrornode.hedera.com';
-	}
-	else if (env.toLowerCase() == 'local') {
-		return 'http://localhost:8000';
-	}
-	else {
-		throw new Error('ERROR: Must specify either MAIN, TEST, LOCAL or PREVIEW as environment');
-	}
-}
-
-function getArgFlag(arg) {
-	const customIndex = process.argv.indexOf(`-${arg}`);
-
-	if (customIndex > -1) {
-		return true;
-	}
-
-	return false;
-}
-
-main()
-	.then(() => {
-		if (!supressLogs) console.log('INFO: Completed @', new Date().toUTCString());
-		process.exit(0);
-	})
-	.catch((error) => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

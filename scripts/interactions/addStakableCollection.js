@@ -1,149 +1,78 @@
-const {
-	Client,
-	AccountId,
-	PrivateKey,
-	ContractId,
-	TokenId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
-const readlineSync = require('readline-sync');
+/**
+ * Add stakeable NFT collections to LazyNFTStaking contract
+ * Refactored to use shared utilities
+ */
+const { ContractId, TokenId } = require('@hashgraph/sdk');
+const { createHederaClient, getCommonContractIds, getLazyDecimals } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList } = require('../../utils/scriptHelpers');
 const { contractExecuteFunction } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
 const { getTokenDetails } = require('../../utils/hederaMirrorHelpers');
-
-// Get operator from .env file
-let operatorKey;
-let operatorId;
-try {
-	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch (err) {
-	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file', err);
-}
-
-const LAZY_TOKEN = process.env.LAZY_TOKEN_ID;
-
-if (operatorKey === undefined || operatorKey == null || operatorId === undefined || operatorId == null) {
-	console.log('Environment required, please specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
-	process.exit(1);
-}
-
-if (LAZY_TOKEN === undefined || LAZY_TOKEN == null) {
-	console.log('Environment required, please specify LAZY_TOKEN_ID in the .env file');
-	process.exit(1);
-}
-
-const contractName = 'LazyNFTStaking';
-
-const env = process.env.ENVIRONMENT ?? null;
-
-let client;
+const { GAS } = require('../../utils/constants');
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorKey === undefined ||
-		operatorKey == null ||
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify PRIVATE_KEY & ACCOUNT_ID in the .env file',
-		);
+	const { client, operatorId, env } = createHederaClient({
+		requireOperator: true,
+		requireEnvVars: ['LAZY_TOKEN_ID'],
+	});
+
+	const args = parseArgs(3, 'addStakableCollection.js 0.0.SSS 0.0.CCC1,0.0.CCC2,0.0.CCC3 R1,R2,R3', [
+		'0.0.SSS is the LazyNFTStaking contract to update',
+		'0.0.CCC1,0.0.CCC2,0.0.CCC3 is the collections to add (comma separated - no spaces)',
+		'R1,R2,R3 is max reward rate per collection (comma separated - no spaces)',
+		'Example: addStakableCollection.js 0.0.12345 0.0.123,0.0.456,0.0.789 1,2,3',
+		'Reward Rate in whole $LAZY that can be earned per period',
+	]);
+
+	const contractId = ContractId.fromString(args[0]);
+	const tokenList = parseCommaList(args[1]).map(t => TokenId.fromString(t));
+	const rewardRates = parseCommaList(args[2]).map(r => parseInt(r));
+
+	// Validate token list size
+	if (tokenList.length > 12) {
+		console.log('ERROR: Too many tokens in the list. Max is 12');
 		process.exit(1);
 	}
 
-	if (env.toUpperCase() == 'TEST') {
-		client = Client.forTestnet();
-		console.log('testing in *TESTNET*');
-	}
-	else if (env.toUpperCase() == 'MAIN') {
-		client = Client.forMainnet();
-		console.log('executing in *MAINNET* #liveAmmo');
-	}
-	else if (env.toUpperCase() == 'PREVIEW') {
-		client = Client.forPreviewnet();
-		console.log('testing in *PREVIEWNET*');
-	}
-	else if (env.toUpperCase() == 'LOCAL') {
-		const node = { '127.0.0.1:50211': new AccountId(3) };
-		client = Client.forNetwork(node).setMirrorNetwork('127.0.0.1:5600');
-		console.log('testing in *LOCAL*');
-	}
-	else {
-		console.log(
-			'ERROR: Must specify either MAIN or TEST or LOCAL as environment in .env file',
-		);
-		return;
-	}
-
-	client.setOperator(operatorId, operatorKey);
-
-	const args = process.argv.slice(2);
-	if (args.length != 3 || getArgFlag('h')) {
-		console.log('Usage: addStakableCollection.js 0.0.SSS 0.0.CCC1,0.0.CCC2,0.0.CCC3 R1,R2,R3');
-		console.log('		0.0.SSS is the LazyNFTStaking contract to update');
-		console.log('		0.0.CCC1,0.0.CCC2,0.0.CCC3 is the collections to add to the staking contract (comma separated - no spaces)');
-		console.log('		R1,R2,R3 is max reward rate per collection (comma separated - no spaces)');
-		console.log('		Example: addStakableCollection.js 0.0.12345 0.0.123,0.0.456,0.0.789 1,2,3');
-		console.log('		Reward Rate in whole $LAZY that can be earned per period');
-		return;
-	}
-
-	const contractId = ContractId.fromString(args[0]);
-	const tokenList = args[1].split(',').map((t) => TokenId.fromString(t));
-	const tokenListAsSolidity = tokenList.map((t) => t.toSolidityAddress());
-	const rewardRates = args[2].split(',').map((r) => parseInt(r));
-
-	// check the token list is <= 12
-	if (tokenList.length > 12) {
-		console.log('Error: Too many tokens in the list. Max is 12');
-		return;
-	}
-
-	// check reward rates length is same as token list
+	// Validate reward rates match token list
 	if (tokenList.length !== rewardRates.length) {
-		console.log('Error: Reward rates length must match token list length');
-		return;
+		console.log('ERROR: Reward rates length must match token list length');
+		process.exit(1);
 	}
 
-	console.log('\n-**ADDING COLLECTIONS FOR STAKING**');
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-	console.log('\n-Collection(s):', tokenList.map((t) => t.toString()).join(', '));
+	// Get LAZY token info for display
+	const { lazyTokenId } = getCommonContractIds();
+	const lazyTokenInfo = await getTokenDetails(env, lazyTokenId);
+	const lazyDecimals = getLazyDecimals();
 
-	// get the Lazy token info
-	const lazyTokenInfo = await getTokenDetails(env, LAZY_TOKEN);
+	printHeader({
+		scriptName: 'Add Collections for Staking',
+		env,
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+		additionalInfo: {
+			'Collections': tokenList.map(t => t.toString()).join(', '),
+		},
+	});
 
-	// for each token, get the token info form the mirror
-	for (const token of tokenList) {
+	// Display each token with its info and reward rate
+	console.log('\nCollection Details:');
+	for (let i = 0; i < tokenList.length; i++) {
+		const token = tokenList[i];
 		const tokenInfo = await getTokenDetails(env, token.toString());
-		console.log('-Token:', token.toString(), 'Symbol:', tokenInfo.symbol, 'Name:', tokenInfo.name, 'Max Reward Rate:', rewardRates[tokenList.indexOf(token)] / 10 ** lazyTokenInfo.decimals, lazyTokenInfo.symbol);
+		console.log(`  ${token.toString()}`);
+		console.log(`    Symbol: ${tokenInfo.symbol}, Name: ${tokenInfo.name}`);
+		console.log(`    Max Reward Rate: ${rewardRates[i] / Math.pow(10, lazyDecimals)} ${lazyTokenInfo.symbol}`);
 	}
 
-	console.log('\n-Reward Rate:', rewardRates);
+	console.log('\nReward Rates (raw):', rewardRates.join(', '));
 
-	// import ABI
-	const lnsJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
+	const lnsIface = loadInterface('LazyNFTStaking');
 
-	const lnsIface = new ethers.Interface(lnsJSON.abi);
+	confirmOrExit('\nDo you want to add these Stakable Collections?');
 
-
-	const proceed = readlineSync.keyInYNStrict('Do you want to update the Stakable Collections?');
-	if (!proceed) {
-		console.log('User Aborted');
-		return;
-	}
-
-	const gas = 300_000 + tokenList.length * 1_000_000;
+	const tokenListAsSolidity = tokenList.map(t => t.toSolidityAddress());
+	const gas = GAS.ADMIN_CALL + tokenList.length * 1_000_000;
 
 	const result = await contractExecuteFunction(
 		contractId,
@@ -154,21 +83,7 @@ const main = async () => {
 		[tokenListAsSolidity, rewardRates],
 	);
 
-	if (result[0]?.status?.toString() != 'SUCCESS') {
-		console.log('Error adding:', result);
-		return;
-	}
-
-	console.log('Collections now stakeable. Transaction ID:', result[2]?.transactionId?.toString());
-
+	logResult(result, 'Collections now stakeable');
 };
 
-
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch(error => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

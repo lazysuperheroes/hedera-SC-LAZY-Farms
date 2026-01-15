@@ -1,70 +1,39 @@
-const {
-	AccountId,
-	ContractId,
-	TokenId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
+/**
+ * Get staked serials for a collection via LazyNFTStaking
+ * Refactored to use shared utilities
+ */
+const { ContractId, TokenId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript } = require('../../utils/scriptHelpers');
 const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
-
-// Get operator from .env file
-let operatorId;
-try {
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'LazyNFTStaking';
-
-const env = process.env.ENVIRONMENT ?? null;
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify PRIVATE_KEY & ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const { operatorId, env } = createHederaClient({ requireOperator: true });
 
-	const args = process.argv.slice(2);
-	if (args.length != 2 || getArgFlag('h')) {
-		console.log('Usage: getStakedSerials.js 0.0.LNS 0.0.CCC');
-		console.log('       LNS is the LazyStakingNFTs Contract address');
-		console.log('	    CCC is the Collection address');
-		return;
-	}
+	const args = parseArgs(2, 'getStakedSerials.js 0.0.LNS 0.0.CCC', [
+		'LNS is the LazyNFTStaking contract address',
+		'CCC is the Collection address',
+	]);
 
 	const contractId = ContractId.fromString(args[0]);
 	const token = TokenId.fromString(args[1]);
 
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-	console.log('\n-Checking Staked Serials For:', token.toString());
+	printHeader({
+		scriptName: 'Get Staked Serials',
+		env,
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+		additionalInfo: {
+			'Collection': token.toString(),
+		},
+	});
 
-	// import ABI
-	const boostManagerJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
+	const lnsIface = loadInterface('LazyNFTStaking');
 
-	const boostManagerIface = new ethers.Interface(boostManagerJSON.abi);
-
-	// query the EVM via mirror node (readOnlyEVMFromMirrorNode)
-
-	const encodedCommand = boostManagerIface.encodeFunctionData(
-		'getStakedSerials',
-		[token.toSolidityAddress()],
-	);
+	const encodedCommand = lnsIface.encodeFunctionData('getStakedSerials', [
+		token.toSolidityAddress(),
+	]);
 
 	const result = await readOnlyEVMFromMirrorNode(
 		env,
@@ -74,18 +43,8 @@ const main = async () => {
 		false,
 	);
 
-	const serials = boostManagerIface.decodeFunctionResult(
-		'getStakedSerials',
-		result,
-	);
+	const serials = lnsIface.decodeFunctionResult('getStakedSerials', result);
 	console.log('Serials:', serials);
 };
 
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch((error) => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);

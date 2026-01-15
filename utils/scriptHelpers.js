@@ -1,0 +1,190 @@
+/**
+ * Common Script Helper Functions
+ * Standardizes patterns used across interaction scripts
+ */
+const readlineSync = require('readline-sync');
+
+/**
+ * Checks if a contract execution result was successful
+ * @param {Array} result - Result from contractExecuteFunction
+ * @returns {boolean} True if successful
+ */
+function isSuccess(result) {
+	return result[0]?.status?.toString() === 'SUCCESS';
+}
+
+/**
+ * Gets the transaction ID from a contract execution result
+ * @param {Array} result - Result from contractExecuteFunction
+ * @returns {string|null} Transaction ID or null
+ */
+function getTransactionId(result) {
+	return result[2]?.transactionId?.toString() ?? null;
+}
+
+/**
+ * Logs execution result and returns success status
+ * @param {Array} result - Result from contractExecuteFunction
+ * @param {string} operation - Description of the operation
+ * @returns {boolean} True if successful
+ */
+function logResult(result, operation) {
+	if (isSuccess(result)) {
+		const txId = getTransactionId(result);
+		console.log(`${operation} successful.${txId ? ` Transaction ID: ${txId}` : ''}`);
+		return true;
+	}
+	else {
+		console.log(`ERROR: ${operation} failed:`, result[0]?.status ?? result);
+		return false;
+	}
+}
+
+/**
+ * Prompts user for Y/N confirmation
+ * @param {string} message - The prompt message
+ * @returns {boolean} True if user confirmed
+ */
+function confirmAction(message) {
+	return readlineSync.keyInYNStrict(message);
+}
+
+/**
+ * Prompts user and exits if not confirmed
+ * @param {string} message - The prompt message
+ * @param {string} abortMessage - Message to show on abort (default: 'User Aborted')
+ */
+function confirmOrExit(message, abortMessage = 'User Aborted') {
+	if (!confirmAction(message)) {
+		console.log(abortMessage);
+		process.exit(0);
+	}
+}
+
+/**
+ * Prints standard script header with environment info
+ * @param {Object} options - Header options
+ * @param {string} options.scriptName - Name of the script
+ * @param {string} options.env - Environment (TEST, MAIN, etc.)
+ * @param {string} options.operatorId - Operator account ID
+ * @param {string} options.contractId - Contract being interacted with
+ * @param {Object} options.additionalInfo - Additional key-value pairs to display
+ */
+function printHeader(options) {
+	const { scriptName, env, operatorId, contractId, additionalInfo = {} } = options;
+
+	if (scriptName) console.log(`\n-** ${scriptName.toUpperCase()} **`);
+	if (env) console.log(`\n-Using ENVIRONMENT: ${env}`);
+	if (operatorId) console.log(`\n-Using Operator: ${operatorId}`);
+	if (contractId) console.log(`\n-Using Contract: ${contractId}`);
+
+	for (const [key, value] of Object.entries(additionalInfo)) {
+		console.log(`\n-${key}: ${value}`);
+	}
+}
+
+/**
+ * Prints usage information and exits
+ * @param {string} usage - Usage string
+ * @param {string[]} details - Additional detail lines
+ */
+function printUsageAndExit(usage, details = []) {
+	console.log(`Usage: ${usage}`);
+	for (const detail of details) {
+		console.log(`       ${detail}`);
+	}
+	process.exit(0);
+}
+
+/**
+ * Parses command line arguments with help flag check
+ * @param {number} expectedCount - Expected number of arguments
+ * @param {string} usage - Usage string for help
+ * @param {string[]} details - Additional detail lines for help
+ * @returns {string[]} The arguments array
+ */
+function parseArgs(expectedCount, usage, details = []) {
+	const { getArgFlag } = require('./nodeHelpers');
+	const args = process.argv.slice(2);
+
+	if (args.length !== expectedCount || getArgFlag('h')) {
+		printUsageAndExit(usage, details);
+	}
+
+	return args;
+}
+
+/**
+ * Formats a token amount with decimals
+ * @param {number|bigint} amount - Raw token amount
+ * @param {number} decimals - Number of decimals
+ * @param {string} symbol - Token symbol (optional)
+ * @returns {string} Formatted amount
+ */
+function formatTokenAmount(amount, decimals, symbol = '') {
+	const value = Number(amount) / Math.pow(10, decimals);
+	return symbol ? `${value} ${symbol}` : value.toString();
+}
+
+/**
+ * Parses a token amount from string to smallest unit
+ * @param {string|number} amount - Human-readable amount
+ * @param {number} decimals - Number of decimals
+ * @returns {bigint} Amount in smallest units
+ */
+function parseTokenAmount(amount, decimals) {
+	return BigInt(Math.floor(Number(amount) * Math.pow(10, decimals)));
+}
+
+/**
+ * Standard main function wrapper with error handling
+ * @param {Function} mainFn - The async main function to run
+ */
+function runScript(mainFn) {
+	mainFn()
+		.then(() => {
+			process.exit(0);
+		})
+		.catch(error => {
+			console.error(error);
+			process.exit(1);
+		});
+}
+
+/**
+ * Parses comma-separated string to array
+ * @param {string} str - Comma-separated string
+ * @returns {string[]} Array of trimmed strings
+ */
+function parseCommaList(str) {
+	return str.split(',').map(s => s.trim());
+}
+
+/**
+ * Parses colon-and-comma separated nested arrays
+ * Example: "1,2,3:4,5,6" -> [[1,2,3], [4,5,6]]
+ * @param {string} str - The string to parse
+ * @param {boolean} asInt - Whether to parse as integers (default: true)
+ * @returns {Array} Nested array
+ */
+function parseNestedList(str, asInt = true) {
+	return str.split(':').map(group =>
+		group.split(',').map(item => asInt ? parseInt(item, 10) : item.trim()),
+	);
+}
+
+module.exports = {
+	isSuccess,
+	getTransactionId,
+	logResult,
+	confirmAction,
+	confirmOrExit,
+	printHeader,
+	printUsageAndExit,
+	parseArgs,
+	formatTokenAmount,
+	parseTokenAmount,
+	runScript,
+	parseCommaList,
+	parseNestedList,
+};

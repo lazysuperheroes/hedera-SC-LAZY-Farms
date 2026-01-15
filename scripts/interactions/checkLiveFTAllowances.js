@@ -1,80 +1,48 @@
-const {
-	AccountId,
-	ContractId,
-	TokenId,
-} = require('@hashgraph/sdk');
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('ethers');
+/**
+ * Batch check live FT allowances via LazyAllowanceUtility
+ * Refactored to use shared utilities
+ */
+const { AccountId, ContractId, TokenId } = require('@hashgraph/sdk');
+const { createHederaClient } = require('../../utils/clientFactory');
+const { loadInterface } = require('../../utils/abiLoader');
+const { parseArgs, printHeader, runScript, parseCommaList } = require('../../utils/scriptHelpers');
 const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
-const { getArgFlag } = require('../../utils/nodeHelpers');
-
-// Get operator from .env file
-let operatorId;
-try {
-	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
-}
-catch {
-	console.log('ERROR: Must specify ACCOUNT_ID in the .env file');
-}
-
-const contractName = 'LazyAllowanceUtility';
-
-const env = process.env.ENVIRONMENT ?? null;
 
 const main = async () => {
-	// configure the client object
-	if (
-		operatorId === undefined ||
-		operatorId == null
-	) {
-		console.log(
-			'Environment required, please specify ACCOUNT_ID in the .env file',
-		);
-		process.exit(1);
-	}
+	const { operatorId, env } = createHederaClient({ requireOperator: true });
 
-	const args = process.argv.slice(2);
-	if (args.length != 4 || getArgFlag('h')) {
-		console.log('Usage: checkLiveFTAllowances.js 0.0.CCC 0.0.TOKEN1,0.0.TOKEN2 0.0.OWNER1,0.0.OWNER2 0.0.SPENDER1,0.0.SPENDER2');
-		console.log('       BATCH CHECK VERSION');
-		console.log('       CCC is the LazyAllowanceUtility address');
-		console.log('       0.0.TOKEN1,2,3 is the FT token  list we are checking for live allowances');
-		console.log('       0.0.OWNER1,2,3 is the owner of the NFT token(s)');
-		console.log('       0.0.SPENDER1,2,3 is the spender of the NFT token');
-		return;
-	}
+	const args = parseArgs(4, 'checkLiveFTAllowances.js 0.0.CCC 0.0.TOKEN1,0.0.TOKEN2 0.0.OWNER1,0.0.OWNER2 0.0.SPENDER1,0.0.SPENDER2', [
+		'BATCH CHECK VERSION',
+		'CCC is the LazyAllowanceUtility address',
+		'TOKEN1,TOKEN2,... is the FT token list we are checking for live allowances',
+		'OWNER1,OWNER2,... is the owners of the token(s)',
+		'SPENDER1,SPENDER2,... is the spenders of the tokens',
+	]);
 
 	const contractId = ContractId.fromString(args[0]);
-	const tokenList = args[1].split(',').map((t) => TokenId.fromString(t));
-	const ownerList = args[2].split(',').map((t) => AccountId.fromString(t));
-	const spenderList = args[3].split(',').map((t) => AccountId.fromString(t));
+	const tokenList = parseCommaList(args[1]).map(t => TokenId.fromString(t));
+	const ownerList = parseCommaList(args[2]).map(t => AccountId.fromString(t));
+	const spenderList = parseCommaList(args[3]).map(t => AccountId.fromString(t));
 
-	console.log('\n-Using ENIVRONMENT:', env);
-	console.log('\n-Using Operator:', operatorId.toString());
-	console.log('\n-Using Contract:', contractId.toString());
-	console.log('\n-Checking Token:', tokenList.map((t) => t.toString()).join(', '));
-	console.log('\n-Checking Owner:', ownerList.map((t) => t.toString()).join(', '));
-	console.log('\n-Checking Spender:', spenderList.map((t) => t.toString()).join(', '));
+	printHeader({
+		scriptName: 'Check Live FT Allowances (Batch)',
+		env,
+		operatorId: operatorId.toString(),
+		contractId: contractId.toString(),
+		additionalInfo: {
+			'Token(s)': tokenList.map(t => t.toString()).join(', '),
+			'Owner(s)': ownerList.map(t => t.toString()).join(', '),
+			'Spender(s)': spenderList.map(t => t.toString()).join(', '),
+		},
+	});
 
-	// import ABI
-	const boostManagerJSON = JSON.parse(
-		fs.readFileSync(
-			`./artifacts/contracts/${contractName}.sol/${contractName}.json`,
-		),
-	);
+	const allowanceIface = loadInterface('LazyAllowanceUtility');
 
-	const boostManagerIface = new ethers.Interface(boostManagerJSON.abi);
-
-	// query the EVM via mirror node (readOnlyEVMFromMirrorNode)
-	const encodedCommand = boostManagerIface.encodeFunctionData(
-		'checkLiveAllowances',
-		[
-			tokenList.map((t) => t.toSolidityAddress()),
-			ownerList.map((o) => o.toSolidityAddress()),
-			spenderList.map((s) => s.toSolidityAddress()),
-		],
-	);
+	const encodedCommand = allowanceIface.encodeFunctionData('checkLiveAllowances', [
+		tokenList.map(t => t.toSolidityAddress()),
+		ownerList.map(o => o.toSolidityAddress()),
+		spenderList.map(s => s.toSolidityAddress()),
+	]);
 
 	const result = await readOnlyEVMFromMirrorNode(
 		env,
@@ -84,23 +52,16 @@ const main = async () => {
 		false,
 	);
 
-	const approved = boostManagerIface.decodeFunctionResult(
-		'checkLiveAllowances',
-		result,
-	);
+	const approved = allowanceIface.decodeFunctionResult('checkLiveAllowances', result);
 
 	for (let i = 0; i < tokenList.length; i++) {
-		console.log('Token:', tokenList[i].toString(), 'Owner:', ownerList[i].toString(), 'Spender:', spenderList[i].toString(), 'Live Allowance:', Number(approved[0][i]));
+		console.log(
+			'Token:', tokenList[i].toString(),
+			'Owner:', ownerList[i].toString(),
+			'Spender:', spenderList[i].toString(),
+			'Live Allowance:', Number(approved[0][i]),
+		);
 	}
-
 };
 
-
-main()
-	.then(() => {
-		process.exit(0);
-	})
-	.catch((error) => {
-		console.error(error);
-		process.exit(1);
-	});
+runScript(main);
