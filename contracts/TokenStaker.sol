@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.12 <0.9.0;
 
-/// @title Core Staking Module for NFTs
+/// @title TokenStaker - Core Staking Module for NFT Movement via HTS
 /// @author stowerling.eth / stowerling.hbar
-/// @notice This smart contract handles the movement of NFTs between the user and other contracts
-/// @dev Uses hbar for royalties making it generic
-/// @version 1.0 - 1 tinybar only.
+/// @notice Base contract that handles the movement of NFTs between users and staking contracts
+/// @dev Provides primitives for HTS token association and NFT transfers with optional delegation
+/// Uses 1 tinybar transfers for royalty handling, making it compatible with any NFT collection
 
 import { HederaResponseCodes } from "./HederaResponseCodes.sol";
 import { HederaTokenService } from "./HederaTokenService.sol";
@@ -21,22 +21,36 @@ contract TokenStaker is HederaTokenService {
 	using SafeCast for uint256;
 	using SafeCast for int256;
 
+	/// @notice Thrown when contract initialization (token association) fails
 	error FailedToInitialize();
+	/// @notice Thrown when function arguments are invalid (e.g., too many serials)
 	error BadArguments();
+	/// @notice Thrown when an NFT transfer via HTS cryptoTransfer fails
+	/// @param _direction Whether the transfer was for staking or withdrawal
 	error NFTTransferFailed(TransferDirection _direction);
+	/// @notice Thrown when a single token association via HTS fails
 	error AssociationFailed();
+	/// @notice Thrown when a batch token association via HTS fails
 	error BatchAssociationFailed();
 
+	/// @notice Direction of NFT transfer
+	/// @dev STAKING moves NFTs from user to contract, WITHDRAWAL moves from contract to user
     enum TransferDirection {
         STAKING,
         WITHDRAWAL
     }
 
+	/// @notice The $LAZY token contract address for gas refills
     address public lazyToken;
+	/// @notice Reference to the LazyGasStation for $LAZY and HBAR refills
 	ILazyGasStation public lazyGasStation;
+	/// @notice Reference to the LazyDelegateRegistry for NFT delegation management
 	ILazyDelegateRegistry public lazyDelegateRegistry;
+	/// @dev Maximum number of NFTs that can be transferred in a single HTS transaction
     uint256 private constant MAX_NFTS_PER_TX = 8;
 
+	/// @dev Modifier that automatically refills $LAZY and HBAR from the gas station if balances are low
+	/// Checks if $LAZY balance < 20 and HBAR balance < 20 tinybars, and refills 50 of each if needed
 	modifier refill() {
 		// check the $LAZY balance of the contract and refill if necessary
 		if(IERC20(lazyToken).balanceOf(address(this)) < 20) {
@@ -49,6 +63,12 @@ contract TokenStaker is HederaTokenService {
 		_;
 	}
 
+	/// @notice Initialize contract references and associate with the $LAZY token
+	/// @dev Must be called by inheriting contracts during initialization
+	/// Associates this contract with the $LAZY token via HTS
+	/// @param _lazyToken The address of the $LAZY token contract
+	/// @param _lazyGasStation The address of the LazyGasStation contract
+	/// @param _lazyDelegateRegistry The address of the LazyDelegateRegistry contract
     function initContracts(address _lazyToken, address _lazyGasStation, address _lazyDelegateRegistry) internal {
         lazyToken = _lazyToken;
 		lazyGasStation = ILazyGasStation(_lazyGasStation);
@@ -64,7 +84,14 @@ contract TokenStaker is HederaTokenService {
         }
     }
 
-    //function to transfer NFTs
+	/// @notice Transfer NFTs between user and contract for staking/unstaking operations
+	/// @dev Uses HTS cryptoTransfer with 1 tinybar for royalty handling
+	/// Limited to MAX_NFTS_PER_TX (8) NFTs per call. Handles delegation automatically if enabled
+	/// @param _direction STAKING (user to contract) or WITHDRAWAL (contract to user)
+	/// @param _collectionAddress The NFT collection contract address
+	/// @param _serials Array of serial numbers to transfer (max 8)
+	/// @param _transferInitiator The user address (source for staking, destination for withdrawal)
+	/// @param _delegate If true, manage delegation via LazyDelegateRegistry
     function moveNFTs(
         TransferDirection _direction,
         address _collectionAddress,
@@ -141,10 +168,9 @@ contract TokenStaker is HederaTokenService {
 		}
     }
 
-    /**
-     * @dev associate token with hedera service
-     * @param tokenId address to associate
-     */
+	/// @notice Associate this contract with a single HTS token
+	/// @dev Safe association that succeeds if already associated
+	/// @param tokenId The token address to associate with this contract
     function tokenAssociate(address tokenId) public {
         int256 response = HederaTokenService.associateToken(
             address(this),
@@ -156,6 +182,10 @@ contract TokenStaker is HederaTokenService {
         }
     }
 
+	/// @notice Associate this contract with multiple HTS tokens in a single transaction
+	/// @dev More gas efficient than individual associations, but fails if any token is already associated
+	/// Use safeBatchTokenAssociate for safer batch operations
+	/// @param tokenIds Array of token addresses to associate with this contract
     function batchTokenAssociate(address[] memory tokenIds) public {
         int256 response = HederaTokenService.associateTokens(
             address(this),
@@ -167,11 +197,9 @@ contract TokenStaker is HederaTokenService {
         }
     }
 
-	/**
-	 * @dev associate a group of tokens one at a time to ensure alrady associated tokens are safely handled
-	 * less gas efficient than batchTokenAssociate
-	 * @param tokenIds array of token addresses to associate
-	 */
+	/// @notice Safely associate multiple tokens by associating each individually
+	/// @dev Less gas efficient than batchTokenAssociate but handles already-associated tokens gracefully
+	/// @param tokenIds Array of token addresses to associate with this contract
 	function safeBatchTokenAssociate(address[] memory tokenIds) public {
 		uint256 tokenArrayLength = tokenIds.length;
 		for(uint256 i = 0; i < tokenArrayLength;) {
@@ -180,13 +208,11 @@ contract TokenStaker is HederaTokenService {
 		}
 	}
 
-	/**
-	 * @dev associate a group of tokens one at a time comparing to a list of already associated tokens
-	 * less gas efficient than batchTokenAssociate but should be more efficient than safeBatchTokenAssociate
-	 * lots of loop work here, so gas costs are high
-	 * @param tokenIds array of token addresses to associate
-	 * @param existingTokenIds array of token addresses already associated
-	 */
+	/// @notice Associate tokens that are not in an existing list of associated tokens
+	/// @dev Compares against a known list to skip already-associated tokens
+	/// More efficient than safeBatchTokenAssociate when you know which tokens are already associated
+	/// @param tokenIds Array of token addresses to potentially associate
+	/// @param existingTokenIds Array of token addresses already associated (to skip)
 	function noClashBatchTokenAssociate(address[] memory tokenIds, address[] memory existingTokenIds) public {
 		uint256 tokenArrayLength = tokenIds.length;
 		uint256 existingTokenArrayLength = existingTokenIds.length;
@@ -206,6 +232,14 @@ contract TokenStaker is HederaTokenService {
 		}
 	}
 
+	/// @notice Transfer multiple NFTs in batches of MAX_NFTS_PER_TX (8)
+	/// @dev Automatically splits large transfers into multiple HTS transactions
+	/// Uses refill modifier to ensure sufficient $LAZY and HBAR for operations
+	/// @param _direction STAKING (user to contract) or WITHDRAWAL (contract to user)
+	/// @param _collectionAddress The NFT collection contract address
+	/// @param _serials Array of serial numbers to transfer (can exceed 8)
+	/// @param _transferInitiator The user address (source for staking, destination for withdrawal)
+	/// @param _delegate If true, manage delegation via LazyDelegateRegistry for each batch
     function batchMoveNFTs(
         TransferDirection _direction,
         address _collectionAddress,

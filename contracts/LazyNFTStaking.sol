@@ -177,6 +177,13 @@ contract LazyNFTStaking is
             );
     }
 
+    /**
+     * @notice Get all NFTs staked by a user
+     * @param _user Address of the user
+     * @return collections Array of collection addresses the user has staked
+     * @return serials 2D array of serial numbers, indexed by collection
+     * @dev Returns empty arrays if user has no staked NFTs
+     */
     function getStakedNFTs(
         address _user
     )
@@ -545,6 +552,16 @@ contract LazyNFTStaking is
             pendingRewards[_user].lastRewardSnapshot;
     }
 
+    /**
+     * @notice Calculate the reward rate for a given epoch
+     * @param epoch The epoch index to calculate for
+     * @param baseRate User's base reward rate from staked NFTs
+     * @param boost User's active boost percentage
+     * @param bonus User's HODL bonus percentage
+     * @return The calculated reward rate adjusted for halvening
+     * @dev Internal function used by calculateRewards
+     * @dev Rate is reduced by 2x for each epoch (halvening mechanism)
+     */
     function calculateEpochRewardRate(
         uint256 epoch,
         uint256 baseRate,
@@ -652,6 +669,13 @@ contract LazyNFTStaking is
         safeBatchTokenAssociate(_collectionAddress);
     }
 
+    /**
+     * @notice Remove collections from the stakeable list
+     * @param _collectionAddress Array of collection addresses to remove
+     * @dev Only callable by owner
+     * @dev Does not affect already staked NFTs from these collections
+     * @dev Resets max base rate to 0 for removed collections
+     */
     function removeStakeableCollection(
         address[] memory _collectionAddress
     ) external onlyOwner {
@@ -739,6 +763,12 @@ contract LazyNFTStaking is
         );
     }
 
+    /**
+     * @notice Set the number of distribution periods required to earn HODL bonus
+     * @param _periodForBonus Number of periods (e.g., 30 = 30 days if period is 1 day)
+     * @dev Only callable by owner
+     * @dev Affects the HODL bonus calculation for all users
+     */
     function setPeriodForBonus(uint16 _periodForBonus) public onlyOwner {
         periodForBonus = _periodForBonus;
         emit ILazyNFTStaking.StakingMessage(
@@ -749,6 +779,12 @@ contract LazyNFTStaking is
         );
     }
 
+    /**
+     * @notice Set the maximum number of HODL bonus periods that can be accumulated
+     * @param _maxBonusTimePeriods Maximum bonus periods (e.g., 8 = 8 months max bonus)
+     * @dev Only callable by owner
+     * @dev Caps the HODL bonus multiplier to prevent unbounded growth
+     */
     function setMaxBonusTimePeriods(
         uint16 _maxBonusTimePeriods
     ) public onlyOwner {
@@ -878,6 +914,13 @@ contract LazyNFTStaking is
         Address.sendValue(receiverAddress, amount);
     }
 
+    /**
+     * @notice Withdraw $LAZY tokens from the contract
+     * @param _receiver Address to receive the tokens
+     * @param _amount Amount of $LAZY to transfer (with decimals)
+     * @dev Only callable by owner
+     * @dev Used for recovering tokens or administrative transfers
+     */
     function retrieveLazy(address _receiver, int64 _amount) external onlyOwner {
         if (_receiver == address(0) || _amount == 0) {
             revert("Invalid address or amount");
@@ -895,7 +938,10 @@ contract LazyNFTStaking is
         }
     }
 
-    // allows the contract top recieve HBAR
+    /**
+     * @notice Receive HBAR sent directly to the contract
+     * @dev Emits StakingMessage event for tracking
+     */
     receive() external payable {
         emit ILazyNFTStaking.StakingMessage(
             "Receive",
@@ -905,6 +951,10 @@ contract LazyNFTStaking is
         );
     }
 
+    /**
+     * @notice Fallback function for receiving HBAR with data
+     * @dev Emits StakingMessage event for tracking
+     */
     fallback() external payable {
         emit ILazyNFTStaking.StakingMessage(
             "Fallback",

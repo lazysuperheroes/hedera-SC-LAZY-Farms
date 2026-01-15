@@ -7,44 +7,47 @@ import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap
 
 import {ILazyDelegateRegistry} from "./interfaces/ILazyDelegateRegistry.sol";
 
+/// @title LazyDelegateRegistry - NFT Delegation for Staking Without Transfer
+/// @author stowerling.eth / stowerling.hbar
+/// @notice Allows NFT owners to delegate their tokens to another wallet for staking purposes without transferring ownership
+/// @dev Supports both wallet-level delegation (all NFTs from a wallet) and token-level delegation (specific NFT serials)
+/// Delegation becomes invalid if the NFT is transferred to a new owner
 contract LazyDelegateRegistry is ILazyDelegateRegistry {
     using EnumerableSet for EnumerableSet.AddressSet;
 	using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableMap for EnumerableMap.UintToAddressMap;
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
-    // wallet => delegate
+    /// @dev Maps wallet address to its designated delegate wallet
     mapping(address => address) private delegateWallet;
-    // wallet => EnumerableSet.AddressSet
-    // to allow a wallet to look up all the wallets that have delegated to it
+    /// @dev Maps delegate address to set of wallets that have delegated to it
     mapping(address => EnumerableSet.AddressSet) private delegatedTo;
-    // token -> serial -> delegate
+    /// @dev Maps token address to (serial number -> delegate address) for NFT-level delegations
     mapping(address => EnumerableMap.UintToAddressMap) private delegatedNFT;
-    // delegate wallet => token set
-    // allows O(1) lookup of all tokens delegated to a wallet
+    /// @dev Maps delegate wallet to set of token addresses delegated to it (O(1) lookup)
     mapping(address => EnumerableSet.AddressSet)
         private delegateWalletToTokenSetMap;
-    // owner wallet => token set
-    // allows O(1) lookup of all tokens delegated by a wallet
+    /// @dev Maps owner wallet to set of token addresses they have delegated (O(1) lookup)
     mapping(address => EnumerableSet.AddressSet)
         private walletToTokenDelegations;
 
-	// map the has of Wallet/Token -> List of serials delegated
+	/// @dev Maps hash(wallet, token) to set of serial numbers delegated
 	mapping(bytes32 => EnumerableSet.UintSet) private delegatedNFTSerialsByHash;
-	// map of token/serial hash to owner
+	/// @dev Maps hash(token, serial) to the original delegator/owner address
 	mapping(bytes32 => address) private delegatedNFTSerialsOwnerByHash;
 
-	// enumerable sets to track the tokens and wallets with delegates
+	/// @dev Set of all wallets that have active wallet-level delegations
     EnumerableSet.AddressSet private walletsWithDelegates;
+    /// @dev Set of all token addresses that have at least one delegated serial
     EnumerableSet.AddressSet private tokensWithDelegates;
 
+    /// @notice Total count of individual NFT serials currently delegated across all tokens
     uint256 public totalSerialsDelegated;
 
-	/**
-	 * @dev delegate a wallet to act on behalf of callers wallet
-	 * Only one delegate per wallet is allowed
-	 * @param _delegate the address of the wallet to delegate to
-	 */
+	/// @notice Delegate your wallet to another address for all NFT operations
+	/// @dev Only one delegate per wallet is allowed. Calling again overwrites the previous delegate.
+	/// This is a wallet-level delegation that affects all NFTs owned by the caller
+	/// @param _delegate The address of the wallet to delegate to
     function delegateWalletTo(address _delegate) external {
         delegateWallet[msg.sender] = _delegate;
         delegatedTo[_delegate].add(msg.sender);
@@ -53,9 +56,9 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
         emit WalletDelegated(msg.sender, _delegate, true);
     }
 
-	/**
-	 * @dev revoke the delegation of a wallet
-	 */
+	/// @notice Revoke any existing wallet-level delegation
+	/// @dev Removes the caller's delegate and cleans up all related mappings
+	/// Completes silently if no delegation exists
     function revokeDelegateWallet() external {
         address currentDelegate = delegateWallet[msg.sender];
         delete delegateWallet[msg.sender];
@@ -66,12 +69,12 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
         }
     }
 
-	/**
-	 * @dev delegate serials of a token to a wallet
-	 * @param _delegate the address of the wallet to delegate to
-	 * @param _token the address of the NFT contract
-	 * @param _serials an array of serial numbers to delegate
-	 */
+	/// @notice Delegate specific NFT serials to a wallet for staking operations
+	/// @dev Only the current owner can delegate. If serials were previously delegated, the old delegation is revoked first.
+	/// Verifies ownership via IERC721.ownerOf() for each serial
+	/// @param _delegate The address of the wallet to receive delegation rights
+	/// @param _token The address of the NFT collection contract
+	/// @param _serials Array of serial numbers to delegate
 	function delegateNFT(
         address _delegate,
         address _token,
@@ -150,13 +153,11 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
     }
 
 
-	/**
-	 * Only the owner can revoke their delegation. If no record of delegation exists
-	 * then it will complete silently as nothing to clean up.
-	 * @dev revoke the delegation of a token
-	 * @param _token the address of the NFT contract
-	 * @param _serials an array of serial numbers to revoke
-	 */
+	/// @notice Revoke delegation for specific NFT serials
+	/// @dev Only the current owner can revoke their delegation. Completes silently if no delegation exists.
+	/// Verifies ownership before allowing revocation
+	/// @param _token The address of the NFT collection contract
+	/// @param _serials Array of serial numbers to revoke delegation for
     function revokeDelegateNFT(address _token, uint256[] memory _serials) public {
 		bytes32 ownerTokenHash = keccak256(abi.encodePacked(msg.sender, _token));
 		for (uint256 i = 0; i < _serials.length;) {
@@ -172,11 +173,10 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
 		}
     }
 
-	/**
-	 * @dev helper function to handle the revocation of a delegation for many tokens/serials
-	 * @param _tokens an array of NFT contract addresses
-	 * @param _serials an array of arrays of serial numbers
-	 */
+	/// @notice Batch revoke delegations for multiple tokens and their serials
+	/// @dev Helper function to revoke delegations across multiple NFT collections in one transaction
+	/// @param _tokens Array of NFT collection contract addresses
+	/// @param _serials Array of arrays, where each inner array contains serial numbers for the corresponding token
     function revokeDelegateNFTs(
         address[] memory _tokens,
         uint256[][] memory _serials
@@ -186,16 +186,14 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
         }
     }
 
-		/**
-	 * @dev internal logic to centralize revokation of the delegation of an NFT token
-	 * given used when adding to unwind old delegations as well as explcit revocation
-	 * @param _ownerTokenHash the hash of the owner and token
-	 * @param _currentOwner the current owner of the NFT
-	 * @param _token the address of the NFT
-	 * @param _serial the serial number of the NFT
-	 * @param _fullRemoval if true then purge as full removal else just tidy up
-	 * @return _removed true if the delegation was removed
-	 */
+	/// @notice Internal function to handle revocation of NFT delegation
+	/// @dev Used both for explicit revocation and for unwinding old delegations when re-delegating
+	/// @param _ownerTokenHash The keccak256 hash of (owner address, token address)
+	/// @param _currentOwner The current owner of the NFT
+	/// @param _token The address of the NFT collection contract
+	/// @param _serial The serial number of the NFT
+	/// @param _fullRemoval If true, performs complete removal; if false, only tidies up for re-delegation
+	/// @return _removed True if a delegation was found and removed, false if no delegation existed
 	function _revokeDelegateNFT(bytes32 _ownerTokenHash, address _currentOwner, address _token, uint256 _serial, bool _fullRemoval) internal returns (bool _removed) {
 		// get current delegate
 		(bool found, address currentDelegate) = delegatedNFT[_token].tryGet(_serial);
@@ -267,12 +265,11 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
 		return false;
 	}
 
-	/**
-	 * @dev helper function to batch delegate NFTs
-	 * @param _delegate the address of the wallet to delegate to
-	 * @param _tokens an array of NFT contract addresses
-	 * @param _serials an array of arrays of serial numbers to delegate
-	 */
+	/// @notice Batch delegate NFTs from multiple collections to a single delegate
+	/// @dev Requires arrays to have matching lengths. Delegates all specified serials to the same delegate
+	/// @param _delegate The address of the wallet to receive delegation rights
+	/// @param _tokens Array of NFT collection contract addresses
+	/// @param _serials Array of arrays, where each inner array contains serial numbers for the corresponding token
     function delegateNFTs(
         address _delegate,
         address[] memory _tokens,
@@ -288,23 +285,19 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
         }
     }
 
-	/**
-	 * @dev get the current delegate of a wallet
-	 * @param _wallet the address of the wallet to check
-	 * @return delegate the address of the delegate wallet (or address(0) if not delegated
-	 */
+	/// @notice Get the wallet-level delegate for a given wallet
+	/// @param _wallet The address of the wallet to check
+	/// @return delegate The address of the delegate wallet, or address(0) if no delegation exists
     function getDelegateWallet(
         address _wallet
     ) external view returns (address delegate) {
         return delegateWallet[_wallet];
     }
 
-	/**
-	 * @dev check if a proposed delegate can act on behalf of a wallet
-	 * @param _actualWallet the address of the wallet to check
-	 * @param _proposedDelegate the address of the proposed delegate
-	 * @return true if the wallet is delegated to the proposed delegate
-	 */
+	/// @notice Check if a proposed delegate is authorized to act on behalf of a wallet
+	/// @param _actualWallet The address of the wallet to check delegation for
+	/// @param _proposedDelegate The address of the proposed delegate to verify
+	/// @return True if the wallet has delegated to the proposed delegate, false otherwise
     function checkDelegateWallet(
         address _actualWallet,
         address _proposedDelegate
@@ -312,13 +305,13 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
         return delegateWallet[_actualWallet] == _proposedDelegate;
     }
 
-	/**
-	 * @dev check if a token has been delegated to a proposed wallet
-	 * @param _proposedDelegate the address of the proposed delegate
-	 * @param _token the address of the NFT contract
-	 * @param _serial the serial number of the NFT
-	 * @return true if the token has been delegated to the proposed delegate
-	 */
+	/// @notice Check if a proposed delegate can act on a specific NFT
+	/// @dev Checks hierarchy: 1) current owner, 2) wallet delegate, 3) token-level delegate
+	/// Also validates that the delegation is still valid (owner hasn't changed)
+	/// @param _proposedDelegate The address of the proposed delegate to verify
+	/// @param _token The address of the NFT collection contract
+	/// @param _serial The serial number of the NFT
+	/// @return True if the proposed delegate is authorized to act on this NFT
     function checkDelegateToken(
         address _proposedDelegate,
         address _token,
@@ -344,23 +337,19 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
 			delegateTokenController == _proposedDelegate;
     }
 
-	/**
-	 * @dev check which wallets have been designated to a given address
-	 * @param _delegateWallet the address of the delegate wallet
-	 * @return wallets an array of wallet addresses
-	 */
+	/// @notice Get all wallets that have delegated to a specific delegate address
+	/// @param _delegateWallet The address of the delegate wallet
+	/// @return Array of wallet addresses that have delegated to this delegate
     function getWalletsDelegatedTo(
         address _delegateWallet
     ) external view returns (address[] memory) {
         return delegatedTo[_delegateWallet].values();
     }
 
-	/**
-	 * @dev get the delegate address of a token/serial pair
-	 * @param _token the address of the NFT contract
-	 * @param _serial the serial number of the NFT
-	 * @return wallet the address of the delegate wallet or address(0) if not delegated
-	 */
+	/// @notice Get the delegate address for a specific NFT serial
+	/// @param _token The address of the NFT collection contract
+	/// @param _serial The serial number of the NFT
+	/// @return wallet The address of the delegate, or address(0) if not delegated
     function getNFTDelegatedTo(
         address _token,
         uint256 _serial
@@ -372,12 +361,10 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
         }
     }
 
-	/**
-	 * @dev helper function to batch get the delegate address of a list of NFTs
-	 * @param _tokens an array of NFT contract addresses
-	 * @param _serials an array of arrays of serial numbers
-	 * @return delegateList an array of arrays of delegate addresses
-	 */
+	/// @notice Batch get delegate addresses for multiple NFTs across multiple collections
+	/// @param _tokens Array of NFT collection contract addresses
+	/// @param _serials Array of arrays, where each inner array contains serial numbers for the corresponding token
+	/// @return delegateList Array of arrays containing delegate addresses (address(0) if not delegated)
     function getNFTListDelegatedTo(
         address[] memory _tokens,
         uint256[][] memory _serials
@@ -397,12 +384,12 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
         }
     }
 
-	/**
-	 * @dev check if the delegation is still valid. If a user transfers the NFT serial to a new wallet
-	 * then the delegation is no longer valid. This function will return false if the delegation is no longer valid.
-	 * The delegation will show but be stale however the contract will not auhorize the delegate to act on the NFT.
-	 * @param _token the address of the NFT contract
-	 */
+	/// @notice Check if a delegation is still valid (owner hasn't transferred the NFT)
+	/// @dev Compares the recorded delegator with the current owner via IERC721.ownerOf()
+	/// A delegation becomes stale if the NFT is transferred to a new owner
+	/// @param _token The address of the NFT collection contract
+	/// @param _serial The serial number of the NFT
+	/// @return True if the delegation is still valid, false if the NFT has been transferred
 	function checkNFTDelegationIsValid(
 		address _token,
 		uint256 _serial
@@ -416,10 +403,11 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
 		return delegatedNFTSerialsOwnerByHash[tokenSerialHash] == currentOwner;
 	}
 
-	/**
-	 * @dev check if the delegation is still valid. Batched helper function to
-	 * reduce number of calls to the mirror nodes
-	 */
+	/// @notice Batch check delegation validity for multiple NFTs across multiple collections
+	/// @dev Batched version to reduce mirror node calls
+	/// @param _tokens Array of NFT collection contract addresses
+	/// @param _serials Array of arrays, where each inner array contains serial numbers for the corresponding token
+	/// @return valid Array of arrays containing validity status for each NFT
 	function checkNFTDelegationIsValidBatch(
 		address[] memory _tokens,
 		uint256[][] memory _serials
@@ -434,12 +422,10 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
 		}
 	}
 
-	/**
-	 * @dev get the tokens/serials delegated to a wallet
-	 * @param _delegate the address of the delegate wallet
-	 * @return tokens an array of NFT contract addresses
-	 * @return serials an array of arrays of serial numbers
-	 */
+	/// @notice Get all NFTs delegated to a specific delegate wallet
+	/// @param _delegate The address of the delegate wallet
+	/// @return tokens Array of NFT collection contract addresses
+	/// @return serials Array of arrays containing serial numbers for each token
     function getNFTsDelegatedTo(
         address _delegate
     )
@@ -455,13 +441,11 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
         }
     }
 
-	/**
-	 * @dev get the tokens/serials delegated by a wallet
-	 * @param _ownerWallet the address of the wallet
-	 * @param _includeSerials if true then return the serials for each token
-	 * @return tokens an array of NFT contract addresses
-	 * @return serials an array of arrays of serial numbers (if requested)
-	 */
+	/// @notice Get all NFTs delegated by a specific owner wallet
+	/// @param _ownerWallet The address of the owner wallet
+	/// @param _includeSerials If true, includes serial numbers; if false, returns empty serials array
+	/// @return tokens Array of NFT collection contract addresses that have delegations
+	/// @return serials Array of arrays containing serial numbers (if _includeSerials is true)
     function getDelegatedNFTsBy(
         address _ownerWallet,
         bool _includeSerials
@@ -482,12 +466,10 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
         }
     }
 
-	/**
-	 * @dev get the serials delegated to a delegate wallet
-	 * @param _delegate the address of the delegate wallet
-	 * @param _token the address of the NFT contract
-	 * @return serials an array of serial numbers
-	 */
+	/// @notice Get all serial numbers of a specific token delegated to a delegate wallet
+	/// @param _delegate The address of the delegate wallet
+	/// @param _token The address of the NFT collection contract
+	/// @return serials Array of serial numbers delegated to this delegate for this token
     function getSerialsDelegatedTo(
         address _delegate,
         address _token
@@ -507,14 +489,13 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
             );
     }
 
-	/**
-	 * @dev get the serials delegated to a delegate wallet based on a range in case the list is too long
-	 * @param _delegate the address of the delegate wallet§
-	 * @param _token the address of the NFT contract
-	 * @param _offset the start of the range
-	 * @param _limit the number of items to return
-	 * @return serials an array of serial numbers
-	 */
+	/// @notice Get a paginated range of serial numbers delegated to a delegate wallet
+	/// @dev Use this when the full list may be too large to return in one call
+	/// @param _delegate The address of the delegate wallet
+	/// @param _token The address of the NFT collection contract
+	/// @param _offset The starting index in the serial list
+	/// @param _limit The maximum number of serials to return
+	/// @return serials Array of serial numbers within the specified range
     function getSerialsDelegatedToRange(
         address _delegate,
         address _token,
@@ -531,12 +512,10 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
 		}
     }
 
-	/**
-	 * @dev get the serials delegated by a wallet
-	 * @param _ownerWallet the address of the wallet
-	 * @param _token the address of the NFT contract
-	 * @return serials an array of serial numbers
-	 */
+	/// @notice Get all serial numbers of a specific token delegated by an owner wallet
+	/// @param _ownerWallet The address of the owner wallet
+	/// @param _token The address of the NFT collection contract
+	/// @return serials Array of serial numbers delegated by this owner for this token
     function getSerialsDelegatedBy(
         address _ownerWallet,
         address _token
@@ -556,14 +535,13 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
             );
     }
 
-	/**
-	 * @dev get the serials delegated by a wallet based on a range in case the list is too long
-	 * @param _ownerWallet the address of the wallet
-	 * @param _token the address of the NFT contract
-	 * @param _offset the start of the range
-	 * @param _limit the number of items to return
-	 * @return serials an array of serial numbers
-	 */
+	/// @notice Get a paginated range of serial numbers delegated by an owner wallet
+	/// @dev Use this when the full list may be too large to return in one call
+	/// @param _ownerWallet The address of the owner wallet
+	/// @param _token The address of the NFT collection contract
+	/// @param _offset The starting index in the serial list
+	/// @param _limit The maximum number of serials to return
+	/// @return serials Array of serial numbers within the specified range
     function getSerialsDelegatedByRange(
         address _ownerWallet,
         address _token,
@@ -580,28 +558,23 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
 		}
     }
 
-	/**
-	 * @dev get the list of tokens with delegates
-	 * @return addresses an array of token addresses
-	 */
+	/// @notice Get all token addresses that have at least one delegated serial
+	/// @return Array of NFT collection contract addresses with active delegations
     function getTokensWithDelegates() external view returns (address[] memory) {
         return tokensWithDelegates.values();
     }
 
-	/**
-	 * @dev helper to check unique colelctions delegated
-	 * @return total number of tokens with delegates
-	 */
+	/// @notice Get the total count of unique NFT collections with delegations
+	/// @return Total number of token addresses with at least one delegated serial
     function getTotalTokensWithDelegates() external view returns (uint256) {
         return tokensWithDelegates.length();
     }
 
-	/**
-	 * @dev get the list of tokens with delegates based on a range in case the list is too long
-	 * @param _offset the start of the range
-	 * @param _limit the number of items to return
-	 * @return tokens an array of token addresses
-	 */
+	/// @notice Get a paginated range of token addresses with delegations
+	/// @dev Use this when the full list may be too large to return in one call
+	/// @param _offset The starting index in the token list
+	/// @param _limit The maximum number of tokens to return
+	/// @return tokens Array of NFT collection contract addresses within the specified range
     function getTokensWithDelegatesRange(
         uint256 _offset,
         uint256 _limit
@@ -613,10 +586,8 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
         }
     }
 
-	/**
-	 * @dev get the list of wallets with delegates
-	 * @return addresses an array of wallet addresses
-	 */
+	/// @notice Get all wallet addresses that have wallet-level delegations
+	/// @return Array of wallet addresses with active wallet-level delegations
     function getWalletsWithDelegates()
         external
         view
@@ -625,20 +596,17 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
         return walletsWithDelegates.values();
     }
 
-	/**
-	 * @dev helper to check unique wallets delegated
-	 * @return total number of wallets with delegates
-	 */
+	/// @notice Get the total count of wallets with wallet-level delegations
+	/// @return Total number of wallets with active wallet-level delegations
     function getTotalWalletsWithDelegates() external view returns (uint256) {
         return walletsWithDelegates.length();
     }
 
-	/**
-	 * @dev get the list of wallets with delegates based on a range in case the list is too long
-	 * @param _offset the start of the range
-	 * @param _limit the number of items to return
-	 * @return wallets an array of wallet addresses
-	 */
+	/// @notice Get a paginated range of wallet addresses with wallet-level delegations
+	/// @dev Use this when the full list may be too large to return in one call
+	/// @param _offset The starting index in the wallet list
+	/// @param _limit The maximum number of wallets to return
+	/// @return wallets Array of wallet addresses within the specified range
     function getWalletsWithDelegatesRange(
         uint256 _offset,
         uint256 _limit

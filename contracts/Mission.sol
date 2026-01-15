@@ -107,8 +107,22 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         _;
     }
 
-    // fill mission details
-    /// @param _missionDuration the duration of the mission in seconds
+    /**
+     * @notice Initializes a new mission instance with the provided configuration
+     * @dev Called once after clone deployment by MissionFactory. Sets up mission parameters,
+     *      associates required tokens, and initializes the mission in a paused state.
+     *      Reverts if already initialized or if critical parameters are zero/empty.
+     * @param _missionDuration The duration of the mission in seconds that users must stake
+     * @param _entryFee The $LAZY token fee required to enter the mission (in token units with decimals)
+     * @param _missionRequirements Array of NFT collection addresses that users must stake to enter
+     * @param _missionRewards Array of NFT collection addresses that will be used as rewards
+     * @param _feeBurnPercentage Percentage of entry fee to burn (0-100)
+     * @param _lastEntryTimestamp Unix timestamp after which no new entries are allowed
+     * @param _missionCreator Address of the mission creator who has admin privileges
+     * @param _missionFactory Address of the MissionFactory contract that deployed this mission
+     * @param _numberOfRequirements Total number of NFT serials required to enter the mission
+     * @param _numberOfRewards Number of NFT rewards given per mission completion
+     */
     function initialize(
         uint256 _missionDuration,
         uint256 _entryFee,
@@ -166,6 +180,14 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         isPaused = true;
     }
 
+    /**
+     * @notice Adds NFT collections that can be used as requirements or rewards for the mission
+     * @dev Associates each collection token with this contract via HTS. Can only be called
+     *      when no users are actively participating in the mission. Duplicate collections
+     *      are handled gracefully (no re-association).
+     * @param _missionRequirements Array of NFT collection addresses to add as valid entry requirements
+     * @param _missionRewards Array of NFT collection addresses to add to the reward pool universe
+     */
     function addRequirementAndRewardCollections(
         address[] memory _missionRequirements,
         address[] memory _missionRewards
@@ -200,7 +222,14 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         }
     }
 
-    //add serial numbers for requirements
+    /**
+     * @notice Adds specific serial numbers as valid requirements for a collection
+     * @dev When serials are added, the collection becomes "limited" meaning only
+     *      those specific serials can be used to enter the mission. The collection
+     *      must already be registered as a requirement collection.
+     * @param _collectionAddress The NFT collection address to add serial restrictions for
+     * @param _serials Array of serial numbers that are valid for mission entry
+     */
     function addRequirementSerials(
         address _collectionAddress,
         uint256[] memory _serials
@@ -219,6 +248,14 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         missionRequirements[_collectionAddress].limitedSerials = true;
     }
 
+    /**
+     * @notice Removes specific serial numbers from the valid requirements for a collection
+     * @dev If all serials are removed from a collection, the limitedSerials flag is set to false,
+     *      allowing any serial from that collection to be used. The collection must already be
+     *      registered as a requirement collection.
+     * @param _collectionAddress The NFT collection address to remove serial restrictions from
+     * @param _serials Array of serial numbers to remove from the valid list
+     */
     function removeRequirementSerials(
         address _collectionAddress,
         uint256[] memory _serials
@@ -239,7 +276,15 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         }
     }
 
-    //add serial numbers for rewards
+    /**
+     * @notice Adds NFT serials as rewards to the mission reward pool
+     * @dev Transfers the specified NFTs from the caller to this contract. Updates the
+     *      available slots based on total rewards divided by rewards per completion.
+     *      No admin check - anyone can add rewards to expand the mission capacity.
+     *      The collection must already be in the reward universe set.
+     * @param _collectionAddress The NFT collection address for the reward NFTs
+     * @param _serials Array of serial numbers to add as rewards (transferred from caller)
+     */
     function addRewardSerials(
         address _collectionAddress,
         uint256[] memory _serials
@@ -282,6 +327,11 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         broadcastSlotsRemaining(slotsAvailable - activeParticipants);
     }
 
+    /**
+     * @notice Returns the number of available slots remaining in the mission
+     * @dev Calculated as total slots (based on rewards) minus active participants
+     * @return _slotsRemaining The number of slots still available for new participants
+     */
     function getSlotsRemaining()
         external
         view
@@ -291,15 +341,22 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
     }
 
     /**
-     * Missions start life paused. Factory control the pause.
-     * @dev update the pause status of the mission
+     * @notice Updates the pause status of the mission
+     * @dev Missions start life paused after initialization. When paused, no new entries
+     *      are allowed but existing participants can still claim rewards or leave.
+     *      Only admins or the mission creator can update pause status.
+     * @param _paused True to pause the mission, false to unpause and allow entries
      */
     function updatePauseStatus(bool _paused) external onlyAdminOrCreator {
         isPaused = _paused;
     }
 
     /**
-     * @dev update the start timestamp of the mission, if 0 effective open (subject to pause)
+     * @notice Sets the timestamp when the mission opens for entry
+     * @dev If set to 0, the mission is effectively open immediately (subject to pause status).
+     *      If set to a future timestamp, entries are blocked until that time.
+     *      Only admins or the mission creator can update this value.
+     * @param _startTimestamp Unix timestamp when entries should be allowed (0 for immediate)
      */
     function setStartTimestamp(
         uint256 _startTimestamp
@@ -307,6 +364,13 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         missionState.startTimestamp = _startTimestamp;
     }
 
+    /**
+     * @notice Returns all reward collections and their available serial numbers
+     * @dev Returns the current state of the reward pool. As rewards are claimed,
+     *      the returned arrays will shrink. Empty collections are removed from the set.
+     * @return _rewards Array of NFT collection addresses in the active reward pool
+     * @return _rewardSerials 2D array of serial numbers available for each collection
+     */
     function getRewards()
         external
         view
@@ -321,10 +385,14 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         return (_rewards, _rewardSerials);
     }
 
-    /*
-     * @dev join a mission
-     * @param _collectionAddress address of the collection
-     * @param _tokenId serial number of the NFT
+    /**
+     * @notice Allows a user to enter the mission by staking required NFTs
+     * @dev Validates mission is open, has slots, and user meets all requirements.
+     *      Transfers NFTs from user to contract (supports delegation). Charges entry fee
+     *      via LazyGasStation with configured burn percentage. User can only have one
+     *      active participation at a time.
+     * @param _collectionAddress Array of NFT collection addresses being staked
+     * @param _serials 2D array of serial numbers for each collection (must total nbOfRequirements)
      */
     function enterMission(
         address[] memory _collectionAddress,
@@ -414,6 +482,12 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         );
     }
 
+    /**
+     * @notice Returns all wallet addresses currently participating in the mission
+     * @dev Returns the full list of active participants. List is updated when users
+     *      enter or leave the mission.
+     * @return _users Array of wallet addresses currently on the mission
+     */
     function getUsersOnMission()
         external
         view
@@ -423,7 +497,15 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
     }
 
     /**
-     * we could pass back the struct, but this is a little more gas efficient
+     * @notice Returns the full participation details for a user on this mission
+     * @dev More gas efficient than returning the struct directly. Returns empty/zero values
+     *      if the user is not currently participating.
+     * @param _user The wallet address to query participation for
+     * @return _stakedNFTs Array of NFT collection addresses the user has staked
+     * @return _stakedSerials 2D array of serial numbers staked for each collection
+     * @return _entryTimestamp Unix timestamp when the user entered the mission
+     * @return _endOfMissionTimestamp Unix timestamp when the user can claim rewards
+     * @return _boosted Whether the user has an active boost reducing their mission duration
      */
     function getMissionParticipation(
         address _user
@@ -447,6 +529,13 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         );
     }
 
+    /**
+     * @notice Returns the mission end timestamp and boost status for a user
+     * @dev Lightweight query for UI display of mission progress and boost status
+     * @param _user The wallet address to query
+     * @return _endOfMissionTimestamp Unix timestamp when the user can claim rewards (0 if not participating)
+     * @return boosted Whether the user has an active boost on this mission
+     */
     function getUserEndAndBoost(
         address _user
     ) external view returns (uint256 _endOfMissionTimestamp, bool boosted) {
@@ -456,6 +545,14 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         );
     }
 
+    /**
+     * @notice Returns detailed boost information for a user on this mission
+     * @dev Queries the BoostManager for the specific boost item being used (if any)
+     * @param _user The wallet address to query boost info for
+     * @return _boostType The type of boost (None, Gem, or Lazy token)
+     * @return _collection The NFT collection address if using a gem boost (zero address otherwise)
+     * @return serial The serial number of the gem NFT if using gem boost (0 otherwise)
+     */
     function getUsersBoostInfo(
         address _user
     )
@@ -470,6 +567,14 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         return IBoostManager(boostManager).getBoostItem(address(this), _user);
     }
 
+    /**
+     * @notice Returns all requirement collections and their serial restrictions
+     * @dev Returns the full configuration of which NFT collections and serials can be used
+     *      to enter the mission. Collections without serial limits will have empty arrays.
+     * @return _requirements Array of NFT collection addresses that can be used for entry
+     * @return _limitedSerials Array of booleans indicating if each collection has serial restrictions
+     * @return _requirementSerials 2D array of allowed serial numbers for each limited collection
+     */
     function getRequirements()
         external
         view
@@ -517,9 +622,11 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
     }
 
     /**
-     * @dev claim rewards
-     * User can claim their rewards. uses Hedera PRNG to select the rewards.
-     * marked as nonReentrant to avoid multiple claims exploits
+     * @notice Allows a participant to claim their randomized NFT rewards after mission completion
+     * @dev Uses Hedera PRNG to randomly select rewards from the available pool. Transfers
+     *      the configured number of reward NFTs to the caller. Automatically calls leaveMission()
+     *      to return staked NFTs. Protected by nonReentrant modifier to prevent exploits.
+     *      Reverts if mission duration has not elapsed.
      */
     function claimRewards() external onlyParticipant nonReentrant {
         require(
@@ -575,7 +682,11 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
     }
 
     /**
-     * @dev Allows emergency escape hatch for user. Will withdraw all NFTs and exit the mission
+     * @notice Allows a participant to exit the mission and withdraw their staked NFTs
+     * @dev Emergency escape hatch that allows users to leave without claiming rewards.
+     *      Returns all staked NFTs to the user, ends any active boost, and frees up
+     *      the mission slot. Called automatically by claimRewards() after reward distribution.
+     *      Can be called at any time by an active participant.
      */
     function leaveMission() public onlyParticipant {
         IBoostManager boostManagerContract = IBoostManager(boostManager);
@@ -603,9 +714,15 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
     }
 
     /**
-     * @dev reduce staking period (only callable by the boost manager)
-     * @param _wallet mission participant
-     * @param _boostReduction of the participant
+     * @notice Reduces the remaining mission duration for a participant by a percentage
+     * @dev Only callable by the BoostManager contract. Calculates the new end time based on
+     *      elapsed time and applies the boost reduction to the remaining duration only.
+     *      For example, a 50% boost with 60 seconds elapsed of 100 second mission would
+     *      reduce remaining 40 seconds to 20 seconds.
+     * @param _wallet The address of the mission participant to boost
+     * @param _boostReduction The percentage reduction to apply (0-100, where 50 = 50% faster)
+     * @return The new end of mission timestamp
+     * @return The new remaining mission duration in seconds
      */
     function reduceStakingPeriod(
         address _wallet,
@@ -634,8 +751,14 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         return (missionParticipants[_wallet].endOfMission, newMissionDuration);
     }
 
-    // function to end mission and withdraw all remaining rewards
-    // one-way function, once closed, cannot be reopened
+    /**
+     * @notice Permanently closes the mission and withdraws all remaining rewards
+     * @dev One-way operation that cannot be undone. Sets lastEntryTimestamp to now and
+     *      slotsAvailable to 0. Withdraws all remaining reward NFTs to the caller.
+     *      Transfers any accumulated $LAZY and HBAR to the MissionFactory.
+     *      Notifies the MissionFactory that this mission is closed.
+     *      Can only be called when there are no active participants.
+     */
     function closeMission() external onlyAdminOrCreator {
         if (activeParticipants != 0) {
             revert UsersOnMission();
@@ -684,14 +807,14 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         missionFactory.closeMission(address(this));
     }
 
-    //withdraw specific rewards from mission
     /**
-     * @dev withdraw collateral from the mission. there can be multiple reward tokens per mission.
-     * we know that the token must be in missionRewardsUniverseSet as only those are associated
-     * only allowed when there are no active participants - users should not experience a bait and switch
-     * on colateral in the contract between entering and exit.
-     * @param _collectionAddress address of the collection to withdraw
-     * @param _serials serials to withdraw
+     * @notice Withdraws specific reward NFTs from the mission without closing it
+     * @dev Allows partial withdrawal of rewards. Updates slotsAvailable based on remaining
+     *      rewards. Collection must be in the reward universe set. Only allowed when there
+     *      are no active participants to prevent bait-and-switch scenarios where collateral
+     *      changes between user entry and exit.
+     * @param _collectionAddress The NFT collection address to withdraw from
+     * @param _serials Array of serial numbers to withdraw (transferred to caller)
      */
     function withdrawRewards(
         address _collectionAddress,
@@ -751,7 +874,14 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         broadcastSlotsRemaining(slotsAvailable - activeParticipants);
     }
 
-    // Allows a time based entry fee to be set to balance demand
+    /**
+     * @notice Calculates and returns the current entry fee for the mission
+     * @dev Supports decreasing entry fees over time (auction-style). If decrementAmount and
+     *      decrementInterval are set, the fee decreases periodically from startTimestamp.
+     *      Returns the base entryFee if decrement is not configured or mission hasn't started.
+     *      Fee will not go below minEntryFee.
+     * @return _entryFee The current entry fee in $LAZY tokens (with decimals)
+     */
     function entryFee() public view returns (uint256 _entryFee) {
         if (
             block.timestamp < missionState.startTimestamp ||
@@ -782,9 +912,13 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         }
     }
 
-    // helper function for the front end to efficient align the decrement for auction entry
-    /// @return _decrementInterval the interval to decrement the entry fee by (seconds)
-    /// @return _startTimestamp the timestamp to open the mission and start countdown (seconds)
+    /**
+     * @notice Returns the decrement configuration for auction-style entry fees
+     * @dev Helper function for frontends to efficiently calculate and display
+     *      the current entry fee and countdown timer for Dutch auction entries.
+     * @return _decrementInterval The interval in seconds between fee decrements
+     * @return _startTimestamp The Unix timestamp when the mission opens and countdown starts
+     */
     function getDecrementDetails()
         external
         view
@@ -793,12 +927,16 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         return (missionState.decrementInterval, missionState.startTimestamp);
     }
 
-    // Allows the entry fee to drecement in time
-    // automatically unpauses the mission now a start time is set
-    /// @param _startTimestamp the timestamp to open the mission and start countdown
-    /// @param _minEntryFee the minimum entry fee allowed ($LAZY - remember the decimals!)
-    /// @param _decrementAmount the amount to decrement the entry fee by each period
-    /// @param _decrementInterval the interval to decrement the entry fee by (seconds)
+    /**
+     * @notice Configures a Dutch auction-style decreasing entry fee for the mission
+     * @dev Sets up automatic fee reduction over time. The fee starts at missionState.entryFee
+     *      and decreases by decrementAmount every decrementInterval seconds until it reaches
+     *      minEntryFee. Automatically unpauses the mission when called.
+     * @param _startTimestamp Unix timestamp when the mission opens and fee countdown begins
+     * @param _minEntryFee Floor price for the entry fee in $LAZY tokens (with decimals)
+     * @param _decrementAmount Amount to reduce the fee by each interval (in $LAZY with decimals)
+     * @param _decrementInterval Time in seconds between each fee reduction
+     */
     function setDecreasingEntryFee(
         uint256 _startTimestamp,
         uint256 _minEntryFee,
@@ -816,14 +954,25 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         isPaused = false;
     }
 
+    /**
+     * @notice Checks if a wallet address is currently participating in the mission
+     * @dev Returns true if the user has a non-zero endOfMission timestamp
+     * @param _wallet The wallet address to check
+     * @return _isParticipant True if the wallet is currently on the mission
+     */
     function isParticipant(
         address _wallet
     ) external view returns (bool _isParticipant) {
         return missionParticipants[_wallet].endOfMission != 0;
     }
 
-    /// @param receiverAddress address in EVM fomat of the reciever of the token
-    /// @param amount number of tokens to send (in tinybar i.e. adjusted for decimal)
+    /**
+     * @notice Transfers HBAR from the mission contract to a specified address
+     * @dev Only allowed when there are no active participants to prevent fund manipulation
+     *      during active missions. Only admins or mission creator can call.
+     * @param receiverAddress The payable address to receive the HBAR (EVM format)
+     * @param amount The amount of HBAR to transfer in tinybar (1 HBAR = 100,000,000 tinybar)
+     */
     function transferHbar(
         address payable receiverAddress,
         uint256 amount
@@ -840,6 +989,13 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         Address.sendValue(receiverAddress, amount);
     }
 
+    /**
+     * @notice Transfers $LAZY tokens from the mission contract to a specified address
+     * @dev Only allowed when there are no active participants to prevent fund manipulation.
+     *      Uses HTS transferToken for the transfer. Only admins or mission creator can call.
+     * @param _receiver The address to receive the $LAZY tokens
+     * @param _amount The amount of $LAZY tokens to transfer (with decimals, as int64 for HTS)
+     */
     function retrieveLazy(
         address _receiver,
         int64 _amount
@@ -863,6 +1019,12 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         }
     }
 
+    /**
+     * @notice Checks if a wallet address has admin privileges for this mission
+     * @dev Returns true if the wallet is an admin on the MissionFactory OR is the mission creator
+     * @param _wallet The wallet address to check for admin privileges
+     * @return True if the wallet has admin privileges, false otherwise
+     */
     function isAdmin(address _wallet) public view returns (bool) {
         return (missionFactory.isAdmin(_wallet) ||
             _wallet == missionState.missionCreator);
