@@ -1,12 +1,21 @@
 /**
  * Manage deployer accounts at MissionFactory
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { AccountId, ContractId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, confirmOrExit, logResult, runScript, parseCommaList } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const {
+	parseArgs,
+	printHeader,
+	confirmOrExit,
+	logResult,
+	runScript,
+	parseCommaList,
+	getMultisigOptions,
+	contractExecuteWithMultisig,
+} = require('../../utils/scriptHelpers');
 
 const main = async () => {
 	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
@@ -50,13 +59,16 @@ const main = async () => {
 
 	const missionFactoryIface = loadInterface('MissionFactory');
 
-	const result = await contractExecuteFunction(
+	// Use multisig if --multisig flag is present, otherwise direct execution
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		missionFactoryIface,
 		client,
 		null,
 		'updateDeployers',
 		[deployerSolidityAddresses, add],
+		multisigOptions,
 	);
 
 	logResult(result, 'Deployers update');

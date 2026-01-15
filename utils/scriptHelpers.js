@@ -3,6 +3,12 @@
  * Standardizes patterns used across interaction scripts
  */
 const readlineSync = require('readline-sync');
+const {
+	parseMultisigArgs,
+	isMultisigEnabled,
+	filterMultisigArgs,
+	contractExecuteWithMultisig,
+} = require('./multisigHelpers');
 
 /**
  * Checks if a contract execution result was successful
@@ -63,6 +69,7 @@ function confirmOrExit(message, abortMessage = 'User Aborted') {
 
 /**
  * Prints standard script header with environment info
+ * Automatically shows multisig status if --multisig flag is present
  * @param {Object} options - Header options
  * @param {string} options.scriptName - Name of the script
  * @param {string} options.env - Environment (TEST, MAIN, etc.)
@@ -77,6 +84,12 @@ function printHeader(options) {
 	if (env) console.log(`\n-Using ENVIRONMENT: ${env}`);
 	if (operatorId) console.log(`\n-Using Operator: ${operatorId}`);
 	if (contractId) console.log(`\n-Using Contract: ${contractId}`);
+
+	// Show multisig status if enabled
+	if (isMultisigEnabled()) {
+		const msOptions = parseMultisigArgs();
+		console.log(`\n-MULTISIG MODE: ${msOptions.threshold}-of-${msOptions.signerLabels.length} (${msOptions.signerLabels.join(', ')})`);
+	}
 
 	for (const [key, value] of Object.entries(additionalInfo)) {
 		console.log(`\n-${key}: ${value}`);
@@ -98,17 +111,24 @@ function printUsageAndExit(usage, details = []) {
 
 /**
  * Parses command line arguments with help flag check
+ * Automatically filters out multisig flags (--multisig, --threshold, --signers, --workflow)
  * @param {number} expectedCount - Expected number of arguments
  * @param {string} usage - Usage string for help
  * @param {string[]} details - Additional detail lines for help
- * @returns {string[]} The arguments array
+ * @returns {string[]} The arguments array (without multisig flags)
  */
 function parseArgs(expectedCount, usage, details = []) {
 	const { getArgFlag } = require('./nodeHelpers');
-	const args = process.argv.slice(2);
+
+	// Filter out multisig-related args before counting
+	const filteredArgv = filterMultisigArgs(process.argv);
+	const args = filteredArgv.slice(2);
+
+	// Add multisig usage hint to details
+	const multisigHint = '       [--multisig [--threshold N] [--signers "Label1,Label2"]]';
 
 	if (args.length !== expectedCount || getArgFlag('h')) {
-		printUsageAndExit(usage, details);
+		printUsageAndExit(usage, [...details, '', 'Multisig Options:', multisigHint]);
 	}
 
 	return args;
@@ -173,6 +193,15 @@ function parseNestedList(str, asInt = true) {
 	);
 }
 
+/**
+ * Get multisig options from command line if --multisig flag is present
+ * Returns null if not in multisig mode
+ * @returns {Object|null} Multisig options or null
+ */
+function getMultisigOptions() {
+	return parseMultisigArgs();
+}
+
 module.exports = {
 	isSuccess,
 	getTransactionId,
@@ -187,4 +216,8 @@ module.exports = {
 	runScript,
 	parseCommaList,
 	parseNestedList,
+	// Multisig helpers (re-exported for convenience)
+	getMultisigOptions,
+	isMultisigEnabled,
+	contractExecuteWithMultisig,
 };

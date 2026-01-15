@@ -47,6 +47,7 @@
    "dependencies": {
       "@directus/sdk": "^15",
       "@hashgraph/sdk": "2.79.0",
+      "@lazysuperheroes/hedera-multisig": "^1.2.2",
       "@openzeppelin/contracts": "^4.6.0",
       "abi-decoder": "^2.4.0",
       "axios": "1.13.2",
