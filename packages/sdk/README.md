@@ -336,6 +336,6 @@ MIT
 
 ## Links
 
-- [Main Repository](https://github.com/LazySuperheroesNFT/hedera-SC-LAZY-Farms)
+- [Main Repository](https://github.com/lazysuperheroes/hedera-SC-LAZY-Farms)
 - [Lazy Superheroes](https://lazysuperheroes.com)
 - [Hedera Developer Docs](https://docs.hedera.com)

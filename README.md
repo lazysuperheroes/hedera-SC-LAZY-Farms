@@ -66,7 +66,7 @@ A production-grade NFT farming and staking system on Hedera, enabling $LAZY toke
 
 ```bash
 # Clone repository
-git clone https://github.com/LazySuperheroesNFT/hedera-SC-LAZY-Farms.git
+git clone https://github.com/lazysuperheroes/hedera-SC-LAZY-Farms.git
 cd hedera-SC-LAZY-Farms
 
 # Install dependencies

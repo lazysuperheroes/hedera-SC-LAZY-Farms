@@ -36,12 +36,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/LazySuperheroesNFT/hedera-SC-LAZY-Farms.git",
+    "url": "https://github.com/lazysuperheroes/hedera-SC-LAZY-Farms.git",
     "directory": "packages/sdk"
   },
-  "homepage": "https://github.com/LazySuperheroesNFT/hedera-SC-LAZY-Farms#readme",
+  "homepage": "https://github.com/lazysuperheroes/hedera-SC-LAZY-Farms#readme",
   "bugs": {
-    "url": "https://github.com/LazySuperheroesNFT/hedera-SC-LAZY-Farms/issues"
+    "url": "https://github.com/lazysuperheroes/hedera-SC-LAZY-Farms/issues"
   },
   "engines": {
     "node": ">=18"
