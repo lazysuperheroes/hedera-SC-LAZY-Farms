@@ -1,0 +1,32 @@
+{
+  "$schema": "./schema.json",
+  "network": "testnet",
+  "chainId": 296,
+  "version": "2.0.0",
+  "deployedAt": null,
+  "deployer": null,
+  "description": "Lazy Superheroes Farming & Staking System - Testnet Deployment",
+  "contracts": {
+    "_comment": "Add testnet contract deployments here"
+  },
+  "missions": {
+    "_comment": "Individual missions deployed via MissionFactory are tracked here",
+    "examples": []
+  },
+  "roles": {
+    "factoryAdmins": [],
+    "factoryDeployers": [],
+    "stakingAdmins": []
+  },
+  "stakingCollections": {
+    "_comment": "NFT collections approved for staking",
+    "collections": []
+  },
+  "metadata": {
+    "lastUpdated": null,
+    "updatedBy": null,
+    "solidityVersion": "0.8.18",
+    "optimizerRuns": 200,
+    "repositoryCommit": ""
+  }
+}

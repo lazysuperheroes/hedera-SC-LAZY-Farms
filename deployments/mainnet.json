@@ -1,0 +1,188 @@
+{
+  "$schema": "./schema.json",
+  "network": "mainnet",
+  "chainId": 295,
+  "version": "2.0.0",
+  "deployedAt": "2024-01-15T00:00:00Z",
+  "deployer": "0.0.6284762",
+  "description": "Lazy Superheroes Farming & Staking System v2.0",
+  "contracts": {
+    "LAZYToken": {
+      "name": "$LAZY Token",
+      "type": "fungible-token",
+      "contractId": "0.0.1311037",
+      "evmAddress": "0x000000000000000000000000000000000013ffed",
+      "description": "The $LAZY fungible token used for rewards and payments",
+      "deployedAt": "2023-03-01T00:00:00Z",
+      "verified": true,
+      "tokenInfo": {
+        "symbol": "LAZY",
+        "decimals": 1,
+        "maxSupply": 2500000000
+      }
+    },
+    "LAZYTokenCreator": {
+      "name": "LAZY Token Creator (SCT)",
+      "type": "contract",
+      "contractId": "0.0.1311003",
+      "evmAddress": "0x000000000000000000000000000000000013ffab",
+      "sourcePath": "contracts/legacy/LAZYTokenCreator.sol",
+      "description": "Token minting contract for $LAZY",
+      "deployedAt": "2023-03-01T00:00:00Z",
+      "verified": true
+    },
+    "LazyGasStation": {
+      "name": "Lazy Gas Station",
+      "type": "contract",
+      "contractId": "0.0.7221483",
+      "evmAddress": "0x00000000000000000000000000000000006e376b",
+      "sourcePath": "contracts/LazyGasStation.sol",
+      "description": "Fee handling for contract operations, manages $LAZY burns and distributions",
+      "deployedAt": "2024-01-10T00:00:00Z",
+      "verified": true,
+      "constructorArgs": {
+        "lazyToken": "0.0.1311037",
+        "lazySCT": "0.0.1311003"
+      },
+      "dependencies": ["LAZYToken", "LAZYTokenCreator"]
+    },
+    "LazyDelegateRegistry": {
+      "name": "Lazy Delegate Registry",
+      "type": "contract",
+      "contractId": "0.0.7221486",
+      "evmAddress": "0x00000000000000000000000000000000006e376e",
+      "sourcePath": "contracts/LazyDelegateRegistry.sol",
+      "description": "NFT delegation without ownership transfer, allows staking delegated NFTs",
+      "deployedAt": "2024-01-10T00:00:00Z",
+      "verified": true
+    },
+    "LazyNFTStaking": {
+      "name": "Lazy NFT Staking",
+      "type": "contract",
+      "contractId": "0.0.7221488",
+      "evmAddress": "0x00000000000000000000000000000000006e3770",
+      "sourcePath": "contracts/LazyNFTStaking.sol",
+      "description": "NFT staking for $LAZY rewards with HODL bonuses",
+      "deployedAt": "2024-01-10T00:00:00Z",
+      "verified": true,
+      "constructorArgs": {
+        "lazyToken": "0.0.1311037",
+        "lazyGasStation": "0.0.7221483",
+        "delegateRegistry": "0.0.7221486"
+      },
+      "dependencies": ["LAZYToken", "LazyGasStation", "LazyDelegateRegistry"],
+      "configuration": {
+        "distributionPeriod": 86400,
+        "burnPercentage": 0,
+        "hodlBonusRate": 25,
+        "periodForBonus": 30,
+        "maxBonusPeriods": 8,
+        "boostRateCap": 500
+      }
+    },
+    "BoostManager": {
+      "name": "Boost Manager",
+      "type": "contract",
+      "contractId": "0.0.8257105",
+      "evmAddress": "0x00000000000000000000000000000000007e0a51",
+      "sourcePath": "contracts/BoostManager.sol",
+      "description": "Mission duration boost system via gems or $LAZY",
+      "deployedAt": "2024-01-15T00:00:00Z",
+      "verified": true,
+      "constructorArgs": {
+        "lazyToken": "0.0.1311037",
+        "lazyGasStation": "0.0.7221483",
+        "delegateRegistry": "0.0.7221486",
+        "burnPercentage": 25
+      },
+      "dependencies": ["LAZYToken", "LazyGasStation", "LazyDelegateRegistry"],
+      "knownIssues": [
+        {
+          "type": "typo",
+          "description": "Function named 'retieveLazy' instead of 'retrieveLazy'",
+          "severity": "cosmetic",
+          "workaround": "Use 'retieveLazy' when calling the function"
+        }
+      ]
+    },
+    "PRNG": {
+      "name": "PRNG System Contract",
+      "type": "contract",
+      "contractId": "0.0.8257116",
+      "evmAddress": "0x00000000000000000000000000000000007e0a5c",
+      "sourcePath": "contracts/PrngSystemContract.sol",
+      "description": "Pseudo-random number generation for reward selection",
+      "deployedAt": "2024-01-15T00:00:00Z",
+      "verified": true
+    },
+    "MissionTemplate": {
+      "name": "Mission Template",
+      "type": "contract",
+      "contractId": "0.0.8257118",
+      "evmAddress": "0x00000000000000000000000000000000007e0a5e",
+      "sourcePath": "contracts/Mission.sol",
+      "description": "Clone template for mission instances (not called directly)",
+      "deployedAt": "2024-01-15T00:00:00Z",
+      "verified": true,
+      "notes": "This is the implementation contract for minimal proxy clones"
+    },
+    "MissionFactory": {
+      "name": "Mission Factory",
+      "type": "contract",
+      "contractId": "0.0.8257122",
+      "evmAddress": "0x00000000000000000000000000000000007e0a62",
+      "sourcePath": "contracts/MissionFactory.sol",
+      "description": "Factory for deploying and managing farming missions",
+      "deployedAt": "2024-01-15T00:00:00Z",
+      "verified": true,
+      "constructorArgs": {
+        "lazyToken": "0.0.1311037",
+        "boostManager": "0.0.8257105",
+        "lazyGasStation": "0.0.7221483",
+        "missionTemplate": "0.0.8257118",
+        "prng": "0.0.8257116",
+        "delegateRegistry": "0.0.7221486"
+      },
+      "dependencies": [
+        "LAZYToken",
+        "BoostManager",
+        "LazyGasStation",
+        "MissionTemplate",
+        "PRNG",
+        "LazyDelegateRegistry"
+      ]
+    }
+  },
+  "missions": {
+    "_comment": "Individual missions deployed via MissionFactory are tracked here",
+    "examples": []
+  },
+  "roles": {
+    "factoryAdmins": [
+      {
+        "address": "0.0.6284762",
+        "name": "LAZY 2.0 SC Deployer",
+        "addedAt": "2024-01-15T00:00:00Z"
+      }
+    ],
+    "factoryDeployers": [],
+    "stakingAdmins": [
+      {
+        "address": "0.0.6284762",
+        "name": "LAZY 2.0 SC Deployer",
+        "addedAt": "2024-01-10T00:00:00Z"
+      }
+    ]
+  },
+  "stakingCollections": {
+    "_comment": "NFT collections approved for staking",
+    "collections": []
+  },
+  "metadata": {
+    "lastUpdated": "2024-01-15T00:00:00Z",
+    "updatedBy": "deployment-script",
+    "solidityVersion": "0.8.18",
+    "optimizerRuns": 200,
+    "repositoryCommit": ""
+  }
+}
