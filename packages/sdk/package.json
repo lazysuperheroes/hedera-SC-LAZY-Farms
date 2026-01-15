@@ -1,0 +1,58 @@
+{
+  "name": "@lazysuperheroes/farming-sdk",
+  "version": "1.0.0",
+  "description": "TypeScript SDK for Lazy Superheroes NFT farming and staking on Hedera",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "abi"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "hedera",
+    "nft",
+    "staking",
+    "farming",
+    "lazy-superheroes",
+    "web3",
+    "blockchain"
+  ],
+  "author": "Lazy Superheroes",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LazySuperheroesNFT/hedera-SC-LAZY-Farms.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/LazySuperheroesNFT/hedera-SC-LAZY-Farms#readme",
+  "bugs": {
+    "url": "https://github.com/LazySuperheroesNFT/hedera-SC-LAZY-Farms/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "@hashgraph/sdk": "^2.50.0",
+    "ethers": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3"
+  }
+}
