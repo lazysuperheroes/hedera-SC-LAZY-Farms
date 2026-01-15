@@ -720,16 +720,28 @@ EntityType.CONTRACT  // 'contracts'
 
 ### Getting EVM Address from Hedera ID
 
+**`toSolidityAddress()` is NOT deprecated** but has a critical limitation:
+
+| Entity Type | `toSolidityAddress()` | Notes |
+|-------------|----------------------|-------|
+| ContractId | Safe | Always works correctly |
+| TokenId | Safe | Always works correctly |
+| AccountId (ED25519) | Safe | Derived address matches network |
+| AccountId (ECDSA) | **Unreliable** | Returns wrong address! |
+
+For **ECDSA accounts**, the EVM address derived from the Hedera account number differs from the actual address the network uses. Use the mirror node helper instead:
+
 ```javascript
 const { homebrewPopulateAccountEvmAddress, EntityType } = require('../utils/hederaMirrorHelpers');
 
-// With explicit entity type (preferred - faster)
-const tokenEvmAddress = await homebrewPopulateAccountEvmAddress(
+// For accounts (especially if key type is unknown or ECDSA)
+const accountEvmAddress = await homebrewPopulateAccountEvmAddress(
     env,
     '0.0.12345',
-    EntityType.TOKEN
+    EntityType.ACCOUNT
 );
 
+// For contracts and tokens, toSolidityAddress() is fine, but mirror works too
 const contractEvmAddress = await homebrewPopulateAccountEvmAddress(
     env,
     contractId.toString(),
@@ -737,10 +749,11 @@ const contractEvmAddress = await homebrewPopulateAccountEvmAddress(
 );
 ```
 
-**Why use this instead of `toSolidityAddress()`?**
-- Accounts with ECDSA keys have different EVM addresses than their Hedera-derived address
-- The mirror node returns the actual EVM address used on the network
-- Falls back to `toSolidityAddress()` if mirror node query fails
+**When to use which:**
+- **ContractId/TokenId**: Use `toSolidityAddress()` directly - it's simpler and always correct
+- **AccountId with known ED25519 key**: `toSolidityAddress()` is fine
+- **AccountId with ECDSA key or unknown key type**: Use mirror node helper
+- **Production scripts handling user accounts**: Use mirror node helper (you don't know their key type)
 
 ### Token Details and Royalty Detection
 
@@ -1286,7 +1299,8 @@ nftTransfer.isApproval = true;
 ├─────────────────────────────────────────────────────────────────┤
 │ TX ID SDK format:         0.0.123@456.789                       │
 │ TX ID Mirror format:      0.0.123-456-789                       │
-│ Account to EVM:           accountId.toSolidityAddress()         │
+│ Account to EVM (ED25519): accountId.toSolidityAddress()         │
+│ Account to EVM (ECDSA):   Use mirror node! (different address)  │
 │ EVM to Account:           AccountId.fromEvmAddress(0, 0, addr)  │
 ├─────────────────────────────────────────────────────────────────┤
 │ Gas Constants:                                                  │
@@ -1305,7 +1319,7 @@ nftTransfer.isApproval = true;
 
 ## Document Maintenance
 
-- **Last Updated**: 2025-12-30
+- **Last Updated**: 2026-01-15
 - **Portability**: Copy to any Hedera project root as `HEDERA_SOLIDITY_GUIDE.md`
 - **Target Reader**: Claude (AI assistant)
 

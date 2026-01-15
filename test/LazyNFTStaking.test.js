@@ -52,7 +52,7 @@ try {
 	operatorKey = PrivateKey.fromStringED25519(process.env.PRIVATE_KEY);
 	operatorId = AccountId.fromString(process.env.ACCOUNT_ID);
 }
-catch (err) {
+catch {
 	console.log('ERROR: Must specify PRIVATE_KEY & ACCOUNT_ID in the .env file');
 }
 
@@ -218,7 +218,7 @@ describe('Deployment', () => {
 			console.log('\n-Using existing LAZY Token ID:', lazyTokenId.toString());
 		}
 		else {
-			const gasLimit = 800_000;
+			const gasLimit = 5_800_000;
 
 			console.log(
 				'\n- Deploying contract...',
@@ -227,7 +227,7 @@ describe('Deployment', () => {
 				gasLimit,
 			);
 
-			[lazySCT] = await contractDeployFunction(client, lazyContractBytecode);
+			[lazySCT] = await contractDeployFunction(client, lazyContractBytecode, gasLimit);
 
 			console.log(
 				`Lazy Token Creator contract created with ID: ${lazySCT} / ${lazySCT.toSolidityAddress()}`,
@@ -268,7 +268,7 @@ describe('Deployment', () => {
 			);
 		}
 		else {
-			const gasLimit = 1_500_000;
+			const gasLimit = 6_800_000;
 			console.log(
 				'\n- Deploying contract...',
 				lazyGasStationName,
@@ -308,7 +308,7 @@ describe('Deployment', () => {
 			);
 		}
 		else {
-			const gasLimit = 500_000;
+			const gasLimit = 6_800_000;
 
 			const ldrJson = JSON.parse(
 				fs.readFileSync(
@@ -330,7 +330,7 @@ describe('Deployment', () => {
 		}
 
 
-		const gasLimit = 2_500_000;
+		const gasLimit = 6_800_000;
 
 		// generate key pair for offchain signing
 		signingWalletPK = PrivateKey.generateECDSA();
@@ -3352,7 +3352,7 @@ describe('Clean-up', () => {
 				[lgsContractUsers[0][i]],
 			);
 
-			if (result[0]?.status.toString() !== 'SUCCESS') {console.log('Failed to remove LGS contract user:', result);}
+			if (result[0]?.status.toString() !== 'SUCCESS') { console.log('Failed to remove LGS contract user:', result); }
 			expect(result[0].status.toString()).to.be.equal('SUCCESS');
 		}
 
@@ -3375,7 +3375,7 @@ describe('Clean-up', () => {
 				[lgsAuthorizers[0][i]],
 			);
 
-			if (result[0]?.status.toString() !== 'SUCCESS') {console.log('Failed to remove LGS authorizer:', result);}
+			if (result[0]?.status.toString() !== 'SUCCESS') { console.log('Failed to remove LGS authorizer:', result); }
 			expect(result[0].status.toString()).to.be.equal('SUCCESS');
 		}
 
@@ -3405,7 +3405,7 @@ describe('Clean-up', () => {
 				[lgsAdmins[0][i]],
 			);
 
-			if (result[0]?.status.toString() !== 'SUCCESS') {console.log('Failed to remove LGS admin:', result);}
+			if (result[0]?.status.toString() !== 'SUCCESS') { console.log('Failed to remove LGS admin:', result); }
 			expect(result[0].status.toString()).to.be.equal('SUCCESS');
 		}
 
@@ -3418,7 +3418,7 @@ describe('Clean-up', () => {
 		for (let a = 0; a < mirrorFTAllowances.length; a++) {
 			const allowance = mirrorFTAllowances[a];
 			// console.log('FT Allowance found:', allowance.token_id, allowance.owner, allowance.spender);
-			if (allowance.token_id == lazyTokenId.toString() && allowance.amount > 0) {outstandingAllowances.push(allowance.spender);}
+			if (allowance.token_id == lazyTokenId.toString() && allowance.amount > 0) { outstandingAllowances.push(allowance.spender); }
 		}
 
 		// if the contract was created reset any $LAZY allowance for the operator

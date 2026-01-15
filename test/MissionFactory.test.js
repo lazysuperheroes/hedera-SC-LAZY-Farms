@@ -208,7 +208,7 @@ describe('Deployment', () => {
 			console.log('\n-Using existing LAZY Token ID:', lazyTokenId.toString());
 		}
 		else {
-			const gasLimit = 800_000;
+			const gasLimit = 4_800_000;
 
 			console.log(
 				'\n- Deploying contract...',
@@ -217,7 +217,7 @@ describe('Deployment', () => {
 				gasLimit,
 			);
 
-			[lazySCT] = await contractDeployFunction(client, lazyContractBytecode);
+			[lazySCT] = await contractDeployFunction(client, lazyContractBytecode, gasLimit);
 
 			console.log(
 				`Lazy Token Creator contract created with ID: ${lazySCT} / ${lazySCT.toSolidityAddress()}`,
@@ -258,7 +258,7 @@ describe('Deployment', () => {
 			);
 		}
 		else {
-			const gasLimit = 1_500_000;
+			const gasLimit = 6_800_000;
 			console.log(
 				'\n- Deploying contract...',
 				lazyGasStationName,
@@ -305,7 +305,7 @@ describe('Deployment', () => {
 			);
 		}
 		else {
-			const gasLimit = 500_000;
+			const gasLimit = 6_800_000;
 
 			const ldrBytecode = ldrJson.bytecode;
 
@@ -338,7 +338,7 @@ describe('Deployment', () => {
 			);
 		}
 		else {
-			const gasLimit = 1_800_000;
+			const gasLimit = 6_800_000;
 			console.log(
 				'\n- Deploying contract...',
 				boostManagerName,
@@ -374,7 +374,7 @@ describe('Deployment', () => {
 			prngId = ContractId.fromString(process.env.PRNG_CONTRACT_ID);
 		}
 		else {
-			const gasLimit = 800_000;
+			const gasLimit = 6_800_000;
 			console.log('\n- Deploying contract...', prngName, '\n\tgas@', gasLimit);
 			const prngJson = JSON.parse(
 				fs.readFileSync(
@@ -393,7 +393,7 @@ describe('Deployment', () => {
 
 		expect(prngId.toString().match(addressRegex).length == 2).to.be.true;
 
-		const gasLimit = 1_500_000;
+		const gasLimit = 6_800_000;
 
 		// deploy mission template
 		const missionTemplateJson = JSON.parse(
@@ -482,9 +482,9 @@ describe('Deployment', () => {
 		/*
 			3 x Requirement NFTs of 18 serials
 			 -> test pool with single requirement NFT
-			 	-> open serials + restricted serials
+				  -> open serials + restricted serials
 			 -> test pool with multiple requirement NFTs
-			 	-> open serials + restricted serials
+				  -> open serials + restricted serials
 			2 x Reward NFTs of 8 serials
 				-> test pool with single reward NFT
 				-> test pool with multiple reward NFTs
@@ -549,7 +549,7 @@ describe('Deployment', () => {
 		// use setLazyBurnPercent to set the % of $LAZY to burn on boost
 		client.setOperator(operatorId, operatorKey);
 
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			boostManagerId,
 			boostManagerIface,
 			client,
@@ -560,7 +560,7 @@ describe('Deployment', () => {
 		expect(result.status.toString()).to.be.equal('SUCCESS');
 
 		// use setLazyBoostReduction for 10 percent reduction
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			boostManagerId,
 			boostManagerIface,
 			client,
@@ -571,7 +571,7 @@ describe('Deployment', () => {
 		expect(result.status.toString()).to.be.equal('SUCCESS');
 
 		// use setGemBoostReduction to set boost 0 at 5, 2 at 15 and 4 at 40
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			boostManagerId,
 			boostManagerIface,
 			client,
@@ -581,7 +581,7 @@ describe('Deployment', () => {
 		);
 		expect(result.status.toString()).to.be.equal('SUCCESS');
 
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			boostManagerId,
 			boostManagerIface,
 			client,
@@ -591,7 +591,7 @@ describe('Deployment', () => {
 		);
 		expect(result.status.toString()).to.be.equal('SUCCESS');
 
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			boostManagerId,
 			boostManagerIface,
 			client,
@@ -601,7 +601,7 @@ describe('Deployment', () => {
 		);
 		expect(result.status.toString()).to.be.equal('SUCCESS');
 
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			boostManagerId,
 			boostManagerIface,
 			client,
@@ -613,7 +613,7 @@ describe('Deployment', () => {
 		expect(result.status.toString()).to.be.equal('SUCCESS');
 
 		// addCollectionToBoostLevel for the 3 requirement NFTs (doubling up their purpose)
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			boostManagerId,
 			boostManagerIface,
 			client,
@@ -624,7 +624,7 @@ describe('Deployment', () => {
 		expect(result.status.toString()).to.be.equal('SUCCESS');
 
 		// SR grade
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			boostManagerId,
 			boostManagerIface,
 			client,
@@ -635,7 +635,7 @@ describe('Deployment', () => {
 		expect(result.status.toString()).to.be.equal('SUCCESS');
 
 		// LR Grade
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			boostManagerId,
 			boostManagerIface,
 			client,
@@ -1440,7 +1440,7 @@ describe('Deployment', () => {
 
 		// switch to Bob and remove Alice as a deployer
 		client.setOperator(bobId, bobPK);
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			factoryContractId,
 			missionFactoryIface,
 			client,
@@ -1461,7 +1461,7 @@ describe('Deployment', () => {
 		);
 		expect(isDeployer[0]).to.be.false;
 
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			factoryContractId,
 			missionFactoryIface,
 			client,
@@ -1495,7 +1495,7 @@ describe('Deployment', () => {
 		expect(result[0]?.status).to.be.equal('REVERT: Last Admin');
 
 		// test updateBoostManager
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			factoryContractId,
 			missionFactoryIface,
 			client,
@@ -1506,7 +1506,7 @@ describe('Deployment', () => {
 		expect(result.status.toString()).to.be.equal('SUCCESS');
 
 		// test updateMissionTemplate
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			factoryContractId,
 			missionFactoryIface,
 			client,
@@ -1517,7 +1517,7 @@ describe('Deployment', () => {
 		expect(result.status.toString()).to.be.equal('SUCCESS');
 
 		// test updatePrngContract
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			factoryContractId,
 			missionFactoryIface,
 			client,
@@ -1528,7 +1528,7 @@ describe('Deployment', () => {
 		expect(result.status.toString()).to.be.equal('SUCCESS');
 
 		// test LGS update
-		[ result ] = await contractExecuteFunction(
+		[result] = await contractExecuteFunction(
 			factoryContractId,
 			missionFactoryIface,
 			client,
@@ -3834,8 +3834,7 @@ describe('Join Missions', () => {
 				fail('Mission not found');
 			}
 			console.log(
-				`${Number(availableSlots[1][a])} Slots available for ${missionName} @ ${
-					Number(availableSlots[2][a]) / LAZY_DECIMAL
+				`${Number(availableSlots[1][a])} Slots available for ${missionName} @ ${Number(availableSlots[2][a]) / LAZY_DECIMAL
 				} $LAZY`,
 			);
 		}
@@ -3900,8 +3899,7 @@ describe('Join Missions', () => {
 				fail('Mission not found');
 			}
 			console.log(
-				`${Number(availableSlots[1][a])} Slots available for ${missionName} @ ${
-					Number(availableSlots[2][a]) / LAZY_DECIMAL
+				`${Number(availableSlots[1][a])} Slots available for ${missionName} @ ${Number(availableSlots[2][a]) / LAZY_DECIMAL
 				} $LAZY`,
 			);
 		}
@@ -4897,7 +4895,7 @@ describe('Join Missions', () => {
 		);
 
 		// uint256, bool
-		const timeStamp	= Math.floor(new Date().getTime() / 1000);
+		const timeStamp = Math.floor(new Date().getTime() / 1000);
 		const operatorEnd = Number(operatorEndAndBoost[0]);
 		expect(operatorEndAndBoost.length).to.be.equal(2);
 		expect(operatorEnd).to.be.greaterThan(timeStamp);
@@ -5046,7 +5044,7 @@ describe('Join Missions', () => {
 
 		expect(result).to.be.equal('SUCCESS');
 
-		const [ aliceBoostResult, aliceBoostReturnObj, record ] = await contractExecuteFunction(
+		const [aliceBoostResult, aliceBoostReturnObj, record] = await contractExecuteFunction(
 			boostManagerId,
 			boostManagerIface,
 			client,
@@ -5654,7 +5652,7 @@ describe('Join Missions', () => {
 		// set the NFT allowance for the mission
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId ],
+			[ReqA_TokenId],
 			operatorId,
 			AccountId.fromString(`0.0.${missionB.num}`),
 		);
@@ -5776,7 +5774,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId ],
+			[ReqA_TokenId],
 			aliceId,
 			AccountId.fromString(`0.0.${missionB.num}`),
 		);
@@ -5821,7 +5819,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId ],
+			[ReqA_TokenId],
 			bobId,
 			AccountId.fromString(`0.0.${missionB.num}`),
 		);
@@ -5981,7 +5979,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId ],
+			[ReqA_TokenId],
 			operatorId,
 			AccountId.fromString(`0.0.${missionC.num}`),
 		);
@@ -6030,7 +6028,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId ],
+			[ReqA_TokenId],
 			aliceId,
 			AccountId.fromString(`0.0.${missionC.num}`),
 		);
@@ -6079,7 +6077,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId ],
+			[ReqA_TokenId],
 			bobId,
 			AccountId.fromString(`0.0.${missionC.num}`),
 		);
@@ -6301,7 +6299,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId ],
+			[ReqA_TokenId],
 			operatorId,
 			AccountId.fromString(`0.0.${missionD.num}`),
 		);
@@ -6352,7 +6350,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId ],
+			[ReqA_TokenId],
 			aliceId,
 			AccountId.fromString(`0.0.${missionD.num}`),
 		);
@@ -6398,7 +6396,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId ],
+			[ReqA_TokenId],
 			bobId,
 			AccountId.fromString(`0.0.${missionD.num}`),
 		);
@@ -6584,7 +6582,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId, ReqB_TokenId, ReqC_TokenId ],
+			[ReqA_TokenId, ReqB_TokenId, ReqC_TokenId],
 			operatorId,
 			AccountId.fromString(`0.0.${missionE.num}`),
 		);
@@ -6643,7 +6641,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqC_TokenId ],
+			[ReqC_TokenId],
 			aliceId,
 			AccountId.fromString(`0.0.${missionE.num}`),
 		);
@@ -6693,7 +6691,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqB_TokenId, ReqC_TokenId ],
+			[ReqB_TokenId, ReqC_TokenId],
 			bobId,
 			AccountId.fromString(`0.0.${missionE.num}`),
 		);
@@ -6999,7 +6997,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId, ReqC_TokenId ],
+			[ReqA_TokenId, ReqC_TokenId],
 			operatorId,
 			AccountId.fromString(`0.0.${missionF.num}`),
 		);
@@ -7059,7 +7057,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqB_TokenId ],
+			[ReqB_TokenId],
 			aliceId,
 			AccountId.fromString(`0.0.${missionF.num}`),
 		);
@@ -7112,7 +7110,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId, ReqB_TokenId ],
+			[ReqA_TokenId, ReqB_TokenId],
 			bobId,
 			AccountId.fromString(`0.0.${missionF.num}`),
 		);
@@ -7337,7 +7335,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId ],
+			[ReqA_TokenId],
 			operatorId,
 			AccountId.fromString(`0.0.${missionG.num}`),
 		);
@@ -7391,7 +7389,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId ],
+			[ReqA_TokenId],
 			aliceId,
 			AccountId.fromString(`0.0.${missionG.num}`),
 		);
@@ -7442,7 +7440,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqC_TokenId, ReqA_TokenId ],
+			[ReqC_TokenId, ReqA_TokenId],
 			bobId,
 			AccountId.fromString(`0.0.${missionG.num}`),
 		);
@@ -7693,7 +7691,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId, ReqB_TokenId ],
+			[ReqA_TokenId, ReqB_TokenId],
 			operatorId,
 			AccountId.fromString(`0.0.${missionI.num}`),
 		);
@@ -7738,7 +7736,7 @@ describe('Join Missions', () => {
 		// set NFT allowance
 		result = await setNFTAllowanceAll(
 			client,
-			[ ReqA_TokenId, ReqB_TokenId ],
+			[ReqA_TokenId, ReqB_TokenId],
 			aliceId,
 			AccountId.fromString(`0.0.${missionI.num}`),
 		);
@@ -7987,7 +7985,7 @@ describe('Clean-up', () => {
 		for (let a = 0; a < mirrorFTAllowances.length; a++) {
 			const allowance = mirrorFTAllowances[a];
 			// console.log('FT Allowance found:', allowance.token_id, allowance.owner, allowance.spender);
-			if (allowance.token_id == lazyTokenId.toString() && allowance.amount > 0)	outstandingAllowances.push(allowance.spender);
+			if (allowance.token_id == lazyTokenId.toString() && allowance.amount > 0) outstandingAllowances.push(allowance.spender);
 		}
 
 		// console.log('Outstanding FT Allowances:', outstandingAllowances);
@@ -8090,7 +8088,7 @@ async function mintLazy(
  * @param {*} amt
  */
 async function sendLazy(receiverId, amt) {
-	const [ result ] = await contractExecuteFunction(
+	const [result] = await contractExecuteFunction(
 		lazySCT,
 		lazyIface,
 		client,
