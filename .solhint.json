@@ -3,8 +3,9 @@
   "rules": {
     "compiler-version": ["error", "^0.8.0"],
     "func-visibility": ["warn", { "ignoreConstructors": true }],
-	"not-rely-on-time": "off",
-	"max-states-count": "off",
-	"custom-error": "off"
+    "not-rely-on-time": "off",
+    "max-states-count": "off",
+    "custom-error": "off",
+    "function-max-lines": ["warn", 200]
   }
 }

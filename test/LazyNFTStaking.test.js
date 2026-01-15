@@ -6,9 +6,7 @@ const {
 	Client,
 	AccountId,
 	PrivateKey,
-	// eslint-disable-next-line no-unused-vars
 	TokenId,
-	// eslint-disable-next-line no-unused-vars
 	ContractId,
 	ContractFunctionParameters,
 	HbarUnit,
