@@ -1,12 +1,13 @@
 /**
  * Leave a mission early (without rewards)
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction, readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
+const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
 const { setHbarAllowance } = require('../../utils/hederaHelpers');
 const { getContractEVMAddress, checkHbarAllowances } = require('../../utils/hederaMirrorHelpers');
 const { GAS } = require('../../utils/constants');
@@ -94,13 +95,15 @@ const main = async () => {
 
 	confirmOrExit('Do you want to exit the mission (no rewards)?');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		missionIface,
 		client,
 		GAS.MISSION_ENTER,
 		'leaveMission',
 		[],
+		multisigOptions,
 	);
 
 	logResult(result, 'Mission Exited');

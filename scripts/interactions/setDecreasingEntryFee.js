@@ -1,12 +1,12 @@
 /**
  * Set decreasing entry fee (Dutch auction) for a Mission
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId } = require('@hashgraph/sdk');
 const { createHederaClient, getLazyDecimals } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult, formatTokenAmount } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, formatTokenAmount, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { GAS } = require('../../utils/constants');
 
 const main = async () => {
@@ -44,13 +44,15 @@ const main = async () => {
 
 	confirmOrExit('Do you want to enable decreasing entry cost (Dutch auction) for this mission?');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		missionIface,
 		client,
 		GAS.BOOST_ACTIVATE,
 		'setDecreasingEntryFee',
 		[startTimestamp, minFee, decrement, interval],
+		multisigOptions,
 	);
 
 	logResult(result, 'Dutch Auction Engaged');

@@ -1,12 +1,12 @@
 /**
  * Bulk pause/unpause missions via MissionFactory
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { getContractEVMAddress } = require('../../utils/hederaMirrorHelpers');
 
 const main = async () => {
@@ -57,7 +57,9 @@ const main = async () => {
 
 	const missionFactoryIface = loadInterface('MissionFactory');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		missionFactoryIface,
 		client,
@@ -67,6 +69,7 @@ const main = async () => {
 			missionsAsSolidityAddresses,
 			pause,
 		],
+		multisigOptions,
 	);
 
 	logResult(result, 'Pause updated');

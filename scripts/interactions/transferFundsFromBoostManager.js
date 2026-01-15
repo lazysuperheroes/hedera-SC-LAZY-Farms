@@ -1,12 +1,12 @@
 /**
  * Transfer HBAR or $LAZY from a BoostManager contract
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { AccountId, ContractId, Hbar, HbarUnit } = require('@hashgraph/sdk');
 const { createHederaClient, getLazyDecimals } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, confirmOrExit, logResult, runScript } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, confirmOrExit, logResult, runScript, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 
 const main = async () => {
 	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
@@ -54,13 +54,15 @@ const main = async () => {
 
 	const boostManagerIface = loadInterface('BoostManager');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		boostManagerIface,
 		client,
 		null,
 		method,
 		[recAddress.toSolidityAddress(), amount],
+		multisigOptions,
 	);
 
 	logResult(result, 'Transfer');

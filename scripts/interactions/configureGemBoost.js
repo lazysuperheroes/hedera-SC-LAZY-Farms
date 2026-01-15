@@ -1,12 +1,12 @@
 /**
  * Configure gem boost reduction percentage for a specific level in BoostManager
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, confirmOrExit, logResult, runScript } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, confirmOrExit, logResult, runScript, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { getLevel, lookupLevel } = require('../../utils/LazyFarmingHelper');
 
 const main = async () => {
@@ -51,13 +51,15 @@ const main = async () => {
 
 	const boostManagerIface = loadInterface('BoostManager');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		boostManagerIface,
 		client,
 		null,
 		'setGemBoostReduction',
 		[rank, reductionPercentage],
+		multisigOptions,
 	);
 
 	logResult(result, 'Gem Level Boost update');

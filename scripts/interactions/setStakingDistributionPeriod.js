@@ -1,12 +1,13 @@
 /**
  * Set the distribution period on LazyNFTStaking contract
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction, readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
+const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
 const { TIME } = require('../../utils/constants');
 
 const main = async () => {
@@ -54,13 +55,15 @@ const main = async () => {
 
 	confirmOrExit('Do you want to update the Distribution period?');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		lnsIface,
 		client,
 		null,
 		'setDistributionPeriod',
 		[secondsForDistribution],
+		multisigOptions,
 	);
 
 	logResult(result, 'Distribution Period updated');

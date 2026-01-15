@@ -1,12 +1,12 @@
 /**
  * Set the start timestamp for a Mission
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { getContractEVMAddress } = require('../../utils/hederaMirrorHelpers');
 const { GAS } = require('../../utils/constants');
 
@@ -47,13 +47,15 @@ const main = async () => {
 
 	confirmOrExit('Do you want to update the mission start time?');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		missionIface,
 		client,
 		GAS.ADMIN_CALL,
 		'setStartTimestamp',
 		[startTimestamp],
+		multisigOptions,
 	);
 
 	logResult(result, 'Start time updated');

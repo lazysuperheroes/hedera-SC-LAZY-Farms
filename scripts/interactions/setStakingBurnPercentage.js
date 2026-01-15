@@ -1,12 +1,13 @@
 /**
  * Set the burn percentage on LazyNFTStaking contract
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction, readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
+const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
 
 const main = async () => {
 	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
@@ -52,13 +53,15 @@ const main = async () => {
 
 	confirmOrExit('Do you want to update the Stakable Burn %?');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		lnsIface,
 		client,
 		null,
 		'setBurnPercentage',
 		[burnPercentage],
+		multisigOptions,
 	);
 
 	logResult(result, 'Burn Percentage updated');

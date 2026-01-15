@@ -1,12 +1,12 @@
 /**
  * Add collection(s) to a boost level in BoostManager
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId, TokenId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, confirmOrExit, runScript, parseCommaList } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, confirmOrExit, runScript, parseCommaList, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { getLevel, lookupLevel } = require('../../utils/LazyFarmingHelper');
 
 const main = async () => {
@@ -48,15 +48,18 @@ const main = async () => {
 
 	const boostManagerIface = loadInterface('BoostManager');
 
+	const multisigOptions = getMultisigOptions();
+
 	// Add each token individually to handle already associated tokens
 	for (const token of tokenList) {
-		const result = await contractExecuteFunction(
+		const result = await contractExecuteWithMultisig(
 			contractId,
 			boostManagerIface,
 			client,
 			1_300_000,
 			'addCollectionToBoostLevel',
 			[rank, token.toSolidityAddress()],
+			multisigOptions,
 		);
 
 		if (result[0]?.status?.toString() !== 'SUCCESS') {

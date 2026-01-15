@@ -1,12 +1,12 @@
 /**
  * Close a mission (admin only)
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { GAS } = require('../../utils/constants');
 
 const main = async () => {
@@ -27,13 +27,15 @@ const main = async () => {
 
 	confirmOrExit('Do you want to close the mission?');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		missionIface,
 		client,
 		GAS.MISSION_LEAVE,
 		'closeMission',
 		[],
+		multisigOptions,
 	);
 
 	logResult(result, 'Mission Closed');

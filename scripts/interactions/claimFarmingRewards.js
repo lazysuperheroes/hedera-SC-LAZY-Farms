@@ -1,12 +1,13 @@
 /**
  * Claim farming rewards and exit mission
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction, readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
+const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
 const { setHbarAllowance } = require('../../utils/hederaHelpers');
 const { checkHbarAllowances } = require('../../utils/hederaMirrorHelpers');
 const { GAS } = require('../../utils/constants');
@@ -91,13 +92,16 @@ const main = async () => {
 
 	confirmOrExit('Do you want to claim rewards and exit the mission?');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		missionIface,
 		client,
 		GAS.MISSION_ENTER,
 		'claimRewards',
 		[],
+		multisigOptions,
 	);
 
 	logResult(result, 'Rewards Claimed');

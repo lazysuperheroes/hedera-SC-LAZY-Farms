@@ -1,12 +1,12 @@
 /**
  * Update MissionFactory settings (boost manager, template, prng, lgs, lazy token)
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { AccountId, ContractId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, confirmOrExit, logResult, runScript } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, confirmOrExit, logResult, runScript, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 
 const SETTING_METHODS = {
 	boost: 'updateBoostManager',
@@ -51,13 +51,15 @@ const main = async () => {
 
 	const missionFactoryIface = loadInterface('MissionFactory');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		missionFactoryIface,
 		client,
 		null,
 		method,
 		[newAddress.toSolidityAddress()],
+		multisigOptions,
 	);
 
 	logResult(result, 'Settings update');

@@ -1,12 +1,12 @@
 /**
  * Transfer HBAR or $LAZY from a Mission contract
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { AccountId, ContractId, Hbar, HbarUnit } = require('@hashgraph/sdk');
 const { createHederaClient, getLazyDecimals } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, confirmOrExit, logResult, runScript } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, confirmOrExit, logResult, runScript, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { getContractEVMAddress } = require('../../utils/hederaMirrorHelpers');
 
 const main = async () => {
@@ -56,13 +56,15 @@ const main = async () => {
 
 	const missionIface = loadInterface('Mission');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		missionIface,
 		client,
 		null,
 		method,
 		[recAddress.toSolidityAddress(), amount],
+		multisigOptions,
 	);
 
 	logResult(result, 'Transfer');

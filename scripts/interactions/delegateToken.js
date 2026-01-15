@@ -1,12 +1,12 @@
 /**
  * Delegate NFT serials to another account via LazyDelegateRegistry
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId, TokenId, AccountId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { GAS } = require('../../utils/constants');
 
 const main = async () => {
@@ -41,13 +41,15 @@ const main = async () => {
 
 	confirmOrExit('Do you want to delegate the token?');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		ldrIface,
 		client,
 		GAS.BOOST_ACTIVATE,
 		'delegateNFT',
 		[target.toSolidityAddress(), token.toSolidityAddress(), serials],
+		multisigOptions,
 	);
 
 	logResult(result, 'Serial(s) delegated');

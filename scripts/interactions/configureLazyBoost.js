@@ -1,12 +1,12 @@
 /**
  * Configure $LAZY boost settings in BoostManager
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId } = require('@hashgraph/sdk');
 const { createHederaClient, getLazyDecimals } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, confirmOrExit, logResult, runScript } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, confirmOrExit, logResult, runScript, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 
 const main = async () => {
 	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
@@ -57,14 +57,17 @@ const main = async () => {
 
 	const boostManagerIface = loadInterface('BoostManager');
 
+	const multisigOptions = getMultisigOptions();
+
 	// Set cost
-	let result = await contractExecuteFunction(
+	let result = await contractExecuteWithMultisig(
 		contractId,
 		boostManagerIface,
 		client,
 		null,
 		'setLazyBoostCost',
 		[rawLazy],
+		multisigOptions,
 	);
 
 	if (!logResult(result, '$LAZY Boost Cost update')) {
@@ -72,13 +75,14 @@ const main = async () => {
 	}
 
 	// Set reduction percentage
-	result = await contractExecuteFunction(
+	result = await contractExecuteWithMultisig(
 		contractId,
 		boostManagerIface,
 		client,
 		null,
 		'setLazyBoostReduction',
 		[reductionPercentage],
+		multisigOptions,
 	);
 
 	if (!logResult(result, '$LAZY Boost Reduction % update')) {
@@ -86,13 +90,14 @@ const main = async () => {
 	}
 
 	// Set burn percentage
-	result = await contractExecuteFunction(
+	result = await contractExecuteWithMultisig(
 		contractId,
 		boostManagerIface,
 		client,
 		null,
 		'setLazyBurnPercentage',
 		[burnPercentage],
+		multisigOptions,
 	);
 
 	logResult(result, '$LAZY Burn % update');

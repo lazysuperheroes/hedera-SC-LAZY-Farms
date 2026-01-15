@@ -2,13 +2,13 @@
  * Retrieve $LAZY from any contract with a retrieveLazy method
  * Prompts for percentage of balance to retrieve
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const readlineSync = require('readline-sync');
 const { ethers } = require('ethers');
 const { AccountId, ContractId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
-const { parseArgs, printHeader, logResult, runScript } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, logResult, runScript, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { checkMirrorBalance } = require('../../utils/hederaMirrorHelpers');
 
 const main = async () => {
@@ -68,13 +68,15 @@ const main = async () => {
 
 	const contractIface = new ethers.Interface([methodFragment]);
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		contractIface,
 		client,
 		null,
 		'retrieveLazy',
 		[destination.toSolidityAddress(), amount],
+		multisigOptions,
 	);
 
 	logResult(result, '$LAZY retrieval');

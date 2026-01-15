@@ -2,12 +2,13 @@
  * Boost a mission using a Gem NFT
  * The gem is returned when the user exits the mission
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId, TokenId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction, readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
+const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
 const { setNFTAllowanceAll } = require('../../utils/hederaHelpers');
 const { getContractEVMAddress } = require('../../utils/hederaMirrorHelpers');
 const { lookupLevel } = require('../../utils/LazyFarmingHelper');
@@ -112,14 +113,17 @@ const main = async () => {
 		return;
 	}
 
+	const multisigOptions = getMultisigOptions();
+
 	// Execute boost
-	result = await contractExecuteFunction(
+	result = await contractExecuteWithMultisig(
 		contractId,
 		boostIface,
 		client,
 		GAS.BOOST_ACTIVATE + 300_000,
 		'boostWithGemCards',
 		[missionId.toSolidityAddress(), gemId.toSolidityAddress(), serial],
+		multisigOptions,
 	);
 
 	if (!logResult(result, 'Boosted!')) {

@@ -1,12 +1,12 @@
 /**
  * Add or remove serial restrictions for mission requirements
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId, TokenId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, confirmOrExit, logResult, runScript, parseCommaList } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, confirmOrExit, logResult, runScript, parseCommaList, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 
 const main = async () => {
 	const { client, operatorId, env } = createHederaClient({ requireOperator: true });
@@ -53,13 +53,16 @@ const main = async () => {
 
 	const missionIface = loadInterface('Mission');
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		missionIface,
 		client,
 		800_000,
 		method,
 		[tokenId.toSolidityAddress(), serials],
+		multisigOptions,
 	);
 
 	logResult(result, 'Requirement Serials update');

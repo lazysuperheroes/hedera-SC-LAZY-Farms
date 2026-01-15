@@ -1,12 +1,12 @@
 /**
  * Add stakeable NFT collections to LazyNFTStaking contract
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId, TokenId } = require('@hashgraph/sdk');
 const { createHederaClient, getCommonContractIds, getLazyDecimals } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { getTokenDetails } = require('../../utils/hederaMirrorHelpers');
 const { GAS } = require('../../utils/constants');
 
@@ -71,16 +71,19 @@ const main = async () => {
 
 	confirmOrExit('\nDo you want to add these Stakable Collections?');
 
+	const multisigOptions = getMultisigOptions();
+
 	const tokenListAsSolidity = tokenList.map(t => t.toSolidityAddress());
 	const gas = GAS.ADMIN_CALL + tokenList.length * 1_000_000;
 
-	const result = await contractExecuteFunction(
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		lnsIface,
 		client,
 		gas,
 		'setStakeableCollection',
 		[tokenListAsSolidity, rewardRates],
+		multisigOptions,
 	);
 
 	logResult(result, 'Collections now stakeable');

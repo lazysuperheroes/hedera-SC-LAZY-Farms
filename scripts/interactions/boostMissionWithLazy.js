@@ -1,12 +1,13 @@
 /**
  * Boost a mission using $LAZY tokens (consumable boost)
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId, TokenId } = require('@hashgraph/sdk');
 const { createHederaClient, getCommonContractIds } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult, formatTokenAmount } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction, readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, formatTokenAmount, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
+const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
 const { setFTAllowance } = require('../../utils/hederaHelpers');
 const { getTokenDetails, checkFTAllowances, getContractEVMAddress } = require('../../utils/hederaMirrorHelpers');
 const { GAS } = require('../../utils/constants');
@@ -134,13 +135,16 @@ const main = async () => {
 
 	confirmOrExit('\nDo you want to Boost with $LAZY (consumable boost)?');
 
-	let result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+
+	let result = await contractExecuteWithMultisig(
 		contractId,
 		boostIface,
 		client,
 		GAS.BOOST_ACTIVATE,
 		'boostWithLazy',
 		[missionId.toSolidityAddress()],
+		multisigOptions,
 	);
 
 	if (!logResult(result, 'Boosted!')) {

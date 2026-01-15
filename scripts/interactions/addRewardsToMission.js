@@ -1,12 +1,12 @@
 /**
  * Add reward serials to a Mission contract
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId, TokenId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { setNFTAllowanceAll } = require('../../utils/hederaHelpers');
 const { getSerialsOwned, getTokenDetails } = require('../../utils/hederaMirrorHelpers');
 const { GAS } = require('../../utils/constants');
@@ -135,14 +135,17 @@ const main = async () => {
 		return;
 	}
 
+	const multisigOptions = getMultisigOptions();
+
 	// Add rewards to mission
-	result = await contractExecuteFunction(
+	result = await contractExecuteWithMultisig(
 		contractId,
 		missionIface,
 		client,
 		GAS.ADMIN_CALL + serials.length * 100_000,
 		'addRewardSerials',
 		[tokenId.toSolidityAddress(), serials],
+		multisigOptions,
 	);
 
 	logResult(result, 'Added Reward Serials');

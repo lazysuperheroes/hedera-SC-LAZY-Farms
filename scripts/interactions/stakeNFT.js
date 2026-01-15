@@ -1,13 +1,13 @@
 /**
  * Stake NFTs in LazyNFTStaking contract
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId, TokenId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseNestedList } = require('../../utils/scriptHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseNestedList, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { generateStakingRewardProof, Stake } = require('../../utils/LazyNFTStakingHelper');
-const { contractExecuteFunction } = require('../../utils/solidityHelpers');
 const { calculateStakeGas } = require('../../utils/constants');
 
 const main = async () => {
@@ -66,13 +66,15 @@ const main = async () => {
 
 	const gas = calculateStakeGas(tokenList.length);
 
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		lnsIface,
 		client,
 		gas,
 		'stake',
 		[stakes, rewardProof],
+		multisigOptions,
 	);
 
 	logResult(result, 'Stake executed');

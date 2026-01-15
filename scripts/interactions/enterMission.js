@@ -1,12 +1,13 @@
 /**
  * Enter a mission by staking NFTs
  * Refactored to use shared utilities
+ * Supports --multisig flag for multi-signature execution
  */
 const { ContractId, TokenId } = require('@hashgraph/sdk');
 const { createHederaClient, getCommonContractIds, getLazyDecimals } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
-const { parseArgs, printHeader, runScript, confirmOrExit, logResult, formatTokenAmount, parseNestedList } = require('../../utils/scriptHelpers');
-const { contractExecuteFunction, contractExecuteQuery } = require('../../utils/solidityHelpers');
+const { parseArgs, printHeader, runScript, confirmOrExit, logResult, formatTokenAmount, parseNestedList, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
+const { contractExecuteQuery } = require('../../utils/solidityHelpers');
 const { setFTAllowance, setNFTAllowanceAll } = require('../../utils/hederaHelpers');
 const { checkFTAllowances, getContractEVMAddress } = require('../../utils/hederaMirrorHelpers');
 const { GAS } = require('../../utils/constants');
@@ -99,13 +100,15 @@ const main = async () => {
 	await setNFTAllowanceAll(client, tokenIdList, operatorId, contractId);
 
 	// Enter mission
-	const result = await contractExecuteFunction(
+	const multisigOptions = getMultisigOptions();
+	const result = await contractExecuteWithMultisig(
 		contractId,
 		missionIface,
 		client,
 		GAS.MISSION_ENTER,
 		'enterMission',
 		[tokenIdAsSolidity, serials],
+		multisigOptions,
 	);
 
 	logResult(result, 'Mission Entered');
