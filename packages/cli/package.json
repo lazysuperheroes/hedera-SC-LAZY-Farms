@@ -1,0 +1,52 @@
+{
+  "name": "@lazysuperheroes/farming-cli",
+  "version": "1.0.0",
+  "description": "Read-only CLI for querying Lazy Superheroes farming and staking contracts on Hedera",
+  "main": "dist/index.js",
+  "bin": {
+    "lazy-farm": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs --clean --minify",
+    "dev": "tsup src/index.ts --format cjs --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "hedera",
+    "nft",
+    "staking",
+    "farming",
+    "lazy-superheroes",
+    "cli"
+  ],
+  "author": "Lazy Superheroes",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lazysuperheroes/hedera-SC-LAZY-Farms.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/lazysuperheroes/hedera-SC-LAZY-Farms#readme",
+  "bugs": {
+    "url": "https://github.com/lazysuperheroes/hedera-SC-LAZY-Farms/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "chalk": "^4.1.2",
+    "cli-table3": "^0.6.3",
+    "commander": "^12.0.0",
+    "ethers": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3"
+  }
+}
