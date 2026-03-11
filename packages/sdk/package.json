@@ -1,6 +1,6 @@
 {
   "name": "@lazysuperheroes/farming-sdk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "TypeScript SDK for Lazy Superheroes NFT farming and staking on Hedera",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
