@@ -507,8 +507,8 @@ contract LazyDelegateRegistry is ILazyDelegateRegistry {
 		uint256[] memory delegateTokenSerials = delegatedNFTSerialsByHash[keccak256(abi.encodePacked(_delegate, _token))].values();
 		require(_offset + _limit <= delegateTokenSerials.length, "LDR: Range OOB");
 		// fill serials array based on offset and limit
-		for (uint256 j = _offset; j < _offset + _limit; j++) {
-			serials[j] = delegateTokenSerials[j];
+		for (uint256 j = 0; j < _limit; j++) {
+			serials[j] = delegateTokenSerials[_offset + j];
 		}
     }
 

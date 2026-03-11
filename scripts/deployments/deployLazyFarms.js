@@ -167,7 +167,7 @@ const main = async () => {
 			return;
 		}
 
-		const gasLimit = 1_500_000;
+		const gasLimit = 3_500_000;
 		console.log(
 			'\n- Deploying contract...',
 			lazyGasStationName,
@@ -211,7 +211,7 @@ const main = async () => {
 			return;
 		}
 
-		const gasLimit = 500_000;
+		const gasLimit = 2_500_000;
 
 		const ldrJson = JSON.parse(
 			fs.readFileSync(
@@ -259,7 +259,7 @@ const main = async () => {
 			return;
 		}
 
-		const gasLimit = 1_800_000;
+		const gasLimit = 5_600_000;
 		console.log(
 			'\n- Deploying contract...',
 			boostManagerName,
@@ -300,7 +300,7 @@ const main = async () => {
 			return;
 		}
 
-		const gasLimit = 800_000;
+		const gasLimit = 2_500_000;
 		console.log('\n- Deploying contract...', prngName, '\n\tgas@', gasLimit);
 		const prngJson = JSON.parse(
 			fs.readFileSync(
@@ -324,7 +324,7 @@ const main = async () => {
 		return;
 	}
 
-	const gasLimit = 1_500_000;
+	const gasLimit = 6_500_000;
 
 	// deploy mission template
 	const missionTemplateJson = JSON.parse(

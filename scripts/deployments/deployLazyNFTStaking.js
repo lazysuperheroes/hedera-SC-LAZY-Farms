@@ -289,7 +289,7 @@ const main = async () => {
 		return;
 	}
 
-	const gasLimit = 2_500_000;
+	const gasLimit = 6_800_000;
 
 	// now deploy main contract
 	const lazyNFTStakerJson = JSON.parse(
