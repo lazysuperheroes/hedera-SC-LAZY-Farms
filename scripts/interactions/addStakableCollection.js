@@ -8,6 +8,7 @@ const { createHederaClient, getCommonContractIds, getLazyDecimals } = require('.
 const { loadInterface } = require('../../utils/abiLoader');
 const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseCommaList, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
 const { getTokenDetails } = require('../../utils/hederaMirrorHelpers');
+const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
 const { GAS } = require('../../utils/constants');
 
 const main = async () => {
@@ -87,6 +88,31 @@ const main = async () => {
 	);
 
 	logResult(result, 'Collections now stakeable');
+
+	// Verify collections were actually added by reading back from the contract
+	console.log('\nVerifying collections on-chain...');
+	const encodedCommand = lnsIface.encodeFunctionData('getStakableCollections', []);
+	const verifyResult = await readOnlyEVMFromMirrorNode(
+		env,
+		contractId,
+		encodedCommand,
+		operatorId,
+		false,
+	);
+
+	const onChainCollections = lnsIface.decodeFunctionResult('getStakableCollections', verifyResult);
+	const onChainSet = new Set(onChainCollections[0].map(addr => TokenId.fromSolidityAddress(addr).toString()));
+
+	const missing = tokenList.filter(t => !onChainSet.has(t.toString()));
+	if (missing.length > 0) {
+		console.log(`WARNING: ${missing.length} collection(s) NOT found on-chain after transaction:`);
+		missing.forEach(t => console.log(`  - ${t.toString()}`));
+		console.log('The transaction may have hit a fallback function on the wrong contract.');
+		process.exit(1);
+	}
+	else {
+		console.log(`Verified: all ${tokenList.length} collection(s) confirmed on-chain.`);
+	}
 };
 
 runScript(main);
