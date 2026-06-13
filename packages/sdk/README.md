@@ -81,6 +81,8 @@ console.log(MAINNET_CONTRACTS.LAZY_TOKEN);      // 0.0.1311037
 console.log(MAINNET_CONTRACTS.NFT_STAKING);     // 0.0.7221488
 console.log(MAINNET_CONTRACTS.MISSION_FACTORY); // 0.0.8257122
 console.log(MAINNET_CONTRACTS.BOOST_MANAGER);   // 0.0.8257105
+console.log(MAINNET_CONTRACTS.PRNG);            // 0.0.10583667
+console.log(MAINNET_CONTRACTS.GEM_TOKEN);       // 0.0.10580248
 ```
 
 ## Staking Operations
@@ -208,6 +210,35 @@ const result = await client.boostWithLazy(
 );
 ```
 
+## Gem Operations
+
+### List an Account's Gems
+
+`getOwnedGems` reads which gem NFTs an account holds (from the mirror node) and
+groups them by boost level. It defaults to the mainnet gems collection
+(`MAINNET_CONTRACTS.GEM_TOKEN`), so callers don't need to know the token id.
+
+```typescript
+import { lookupGemLevel } from '@lazysuperheroes/farming-sdk';
+
+const gems = await client.getOwnedGems('0.0.123456');
+
+console.log(`Total gems: ${gems.total}`);
+console.log(`Best gem: ${gems.bestLevel !== null ? lookupGemLevel(gems.bestLevel) : 'none'}`);
+
+// holdings are ordered highest-reduction first; empty levels are omitted
+for (const h of gems.holdings) {
+  console.log(`${h.levelName}: ${h.serials.length} gems (${h.reduction}% boost) -> ${h.serials.join(', ')}`);
+}
+
+// Pass a different collection if needed:
+// const gems = await client.getOwnedGems('0.0.123456', '0.0.10580248');
+```
+
+Each serial is mapped to its level via the published `GEM_SERIAL_RANGES`, which
+mirror the on-chain `BoostManager` config. For an authoritative per-serial check,
+query `BoostManager.getBoostLevel` directly.
+
 ## Delegation Operations
 
 ### Delegate an NFT
@@ -313,6 +344,8 @@ import type {
   Stake,
   RewardProof,
   TransactionResult,
+  OwnedGems,
+  GemHolding,
 } from '@lazysuperheroes/farming-sdk';
 ```
 
