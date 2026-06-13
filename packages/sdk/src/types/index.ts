@@ -34,6 +34,8 @@ export interface ContractAddresses {
   lazyGasStation?: ContractId | string;
   /** LazyDelegateRegistry contract */
   delegateRegistry?: ContractId | string;
+  /** Gems boost NFT collection */
+  gemToken?: TokenId | string;
 }
 
 // ============================================================
@@ -208,6 +210,32 @@ export interface ActiveBoost {
   percentage: number;
   /** Activation timestamp */
   activatedAt: number;
+}
+
+export interface GemHolding {
+  /** Gem level index (0-5) */
+  level: number;
+  /** Level name (C, R, SR, UR, LR, SPE) */
+  levelName: string;
+  /** Mission-duration reduction for this level (%) */
+  reduction: number;
+  /** Owned serials at this level */
+  serials: number[];
+}
+
+export interface OwnedGems {
+  /** Account queried */
+  account: string;
+  /** Gem token collection */
+  token: string;
+  /** Total gems owned */
+  total: number;
+  /** Holdings grouped by level, highest-reduction first (empty levels omitted) */
+  holdings: GemHolding[];
+  /** Serials not in any configured boost range */
+  unmapped: number[];
+  /** Level index of the best (highest-reduction) gem held, or null if none */
+  bestLevel: number | null;
 }
 
 // ============================================================

@@ -51,6 +51,8 @@ export type {
   GemBoostConfig,
   LazyBoostConfig,
   ActiveBoost,
+  GemHolding,
+  OwnedGems,
 
   // Delegation types
   Delegation,
@@ -68,8 +70,12 @@ export {
   PERCENTAGE,
   TIME,
   MAINNET_CONTRACTS,
+  MIRROR_NODE_URLS,
   GEM_LEVELS,
   GEM_LEVEL_NAMES,
+  GEM_LEVEL_REDUCTIONS,
+  GEM_SERIAL_RANGES,
+  gemLevelForSerial,
   lookupGemLevel,
   getGemLevel,
 } from './constants';

@@ -108,12 +108,36 @@
     "PRNG": {
       "name": "PRNG System Contract",
       "type": "contract",
-      "contractId": "0.0.8257116",
-      "evmAddress": "0x00000000000000000000000000000000007e0a5c",
+      "contractId": "0.0.10583667",
+      "evmAddress": "0x0000000000000000000000000000000000a17e73",
       "sourcePath": "contracts/PrngSystemContract.sol",
       "description": "Pseudo-random number generation for reward selection",
-      "deployedAt": "2024-01-15T00:00:00Z",
-      "verified": true
+      "deployedAt": "2026-06-13T00:00:00Z",
+      "verified": true,
+      "previousContractId": "0.0.8257116",
+      "note": "Redeployed 2026-06-13 to fix an off-by-one (inclusive upper bound) so the max value is selectable. MissionFactory repointed via updatePrngContract while no missions were deployed; old 0.0.8257116 retired."
+    },
+    "GemsToken": {
+      "name": "Gems Boost NFT Collection",
+      "type": "non-fungible-token",
+      "contractId": "0.0.10580248",
+      "evmAddress": "0x0000000000000000000000000000000000a17118",
+      "description": "Single serial-locked NFT collection for mission gem boosts; serial -> boost level resolved via BoostManager.getBoostLevel. Replaced the legacy multi-collection gem set on 2026-06-13.",
+      "deployedAt": "2026-06-13T00:00:00Z",
+      "verified": false,
+      "tokenInfo": {
+        "symbol": "GEMS",
+        "decimals": 0,
+        "maxSupply": 3490,
+        "serialLevels": {
+          "C": "5% (2000 serials)",
+          "R": "10% (750 serials)",
+          "SR": "15% (450 serials)",
+          "UR": "25% (180 serials)",
+          "LR": "40% (10 serials)",
+          "SPE": "20% (100 serials)"
+        }
+      }
     },
     "MissionTemplate": {
       "name": "Mission Template",
@@ -150,7 +174,8 @@
         "MissionTemplate",
         "PRNG",
         "LazyDelegateRegistry"
-      ]
+      ],
+      "note": "Live PRNG is now 0.0.10583667 (repointed via updatePrngContract on 2026-06-13). constructorArgs.prng records the original deploy-time value."
     }
   },
   "missions": {
@@ -179,7 +204,7 @@
     "collections": []
   },
   "metadata": {
-    "lastUpdated": "2024-01-15T00:00:00Z",
+    "lastUpdated": "2026-06-13T00:00:00Z",
     "updatedBy": "deployment-script",
     "solidityVersion": "0.8.18",
     "optimizerRuns": 200,

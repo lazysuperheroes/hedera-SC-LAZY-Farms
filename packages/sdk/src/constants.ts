@@ -127,8 +127,11 @@ export const MAINNET_CONTRACTS = {
   /** BoostManager */
   BOOST_MANAGER: '0.0.8257105',
 
-  /** PRNG */
-  PRNG: '0.0.8257116',
+  /** PRNG (redeployed 2026-06-13 with inclusive-max fix; factory repointed via updatePrngContract) */
+  PRNG: '0.0.10583667',
+
+  /** Gems boost NFT collection — single serial-locked token; serial -> level via BoostManager.getBoostLevel */
+  GEM_TOKEN: '0.0.10580248',
 } as const;
 
 /**
@@ -159,4 +162,44 @@ export function getGemLevel(levelName: string): number {
   const upper = levelName.toUpperCase();
   const level = GEM_LEVELS[upper as keyof typeof GEM_LEVELS];
   return level ?? parseInt(levelName, 10);
+}
+
+/**
+ * Mirror node REST base URLs by environment
+ */
+export const MIRROR_NODE_URLS = {
+  mainnet: 'https://mainnet-public.mirrornode.hedera.com',
+  testnet: 'https://testnet.mirrornode.hedera.com',
+  previewnet: 'https://previewnet.mirrornode.hedera.com',
+  local: 'http://127.0.0.1:5551',
+} as const;
+
+/**
+ * Boost % reduction by gem level index (C, R, SR, UR, LR, SPE)
+ */
+export const GEM_LEVEL_REDUCTIONS = [5, 10, 15, 25, 40, 20] as const;
+
+/**
+ * Gem serial -> boost level ranges (inclusive). Mirrors the on-chain BoostManager
+ * config for GEM_TOKEN; for authoritative checks call BoostManager.getBoostLevel.
+ */
+export const GEM_SERIAL_RANGES: Record<number, ReadonlyArray<readonly [number, number]>> = {
+  0: [[421, 1170], [1531, 2280], [2431, 2920], [3481, 3490]], // C
+  1: [[1231, 1530], [2281, 2430], [3071, 3370]],              // R
+  2: [[61, 210], [271, 420], [2921, 3070]],                   // SR
+  3: [[1, 60], [211, 270], [1171, 1230]],                     // UR
+  4: [[3371, 3380]],                                          // LR
+  5: [[3381, 3480]],                                          // SPE
+};
+
+/**
+ * Resolve a gem serial to its boost level index (0-5), or -1 if not in any range.
+ */
+export function gemLevelForSerial(serial: number): number {
+  for (let lvl = 0; lvl < 6; lvl++) {
+    for (const [a, b] of GEM_SERIAL_RANGES[lvl]) {
+      if (serial >= a && serial <= b) return lvl;
+    }
+  }
+  return -1;
 }

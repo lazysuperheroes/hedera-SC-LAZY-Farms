@@ -1,6 +1,6 @@
 {
   "name": "@lazysuperheroes/farming-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Read-only CLI for querying Lazy Superheroes farming and staking contracts on Hedera",
   "main": "dist/index.js",
   "bin": {

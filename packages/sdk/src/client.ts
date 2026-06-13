@@ -23,8 +23,17 @@ import type {
   RewardProof,
   TransactionResult,
   MissionInfo,
+  OwnedGems,
 } from './types';
-import { GAS, calculateStakeGas, MAINNET_CONTRACTS } from './constants';
+import {
+  GAS,
+  calculateStakeGas,
+  MAINNET_CONTRACTS,
+  MIRROR_NODE_URLS,
+  GEM_LEVEL_NAMES,
+  GEM_LEVEL_REDUCTIONS,
+  gemLevelForSerial,
+} from './constants';
 import { generateStakingRewardProof, validateStake } from './helpers/staking';
 
 // ABI imports - loaded at runtime to avoid bundling issues
@@ -130,6 +139,7 @@ export class LazyFarmingSDK {
       boostManager: MAINNET_CONTRACTS.BOOST_MANAGER,
       lazyGasStation: MAINNET_CONTRACTS.GAS_STATION,
       delegateRegistry: MAINNET_CONTRACTS.DELEGATE_REGISTRY,
+      gemToken: MAINNET_CONTRACTS.GEM_TOKEN,
     };
   }
 
@@ -438,6 +448,64 @@ export class LazyFarmingSDK {
   }
 
   // ============================================================
+  // Gem Operations
+  // ============================================================
+
+  /**
+   * List the gem-boost NFTs an account holds, grouped by boost level.
+   *
+   * Reads ownership from the mirror node (paginated) and maps each serial to its
+   * level via the published GEM_SERIAL_RANGES, which mirror the on-chain
+   * BoostManager config. For an authoritative per-serial check, call
+   * BoostManager.getBoostLevel directly.
+   *
+   * @param accountId - Account to query
+   * @param gemToken - Gem collection (defaults to the configured GEM_TOKEN)
+   */
+  async getOwnedGems(
+    accountId: AccountId | string,
+    gemToken?: TokenId | string
+  ): Promise<OwnedGems> {
+    const account = typeof accountId === 'string' ? accountId : accountId.toString();
+    const token =
+      (gemToken
+        ? typeof gemToken === 'string'
+          ? gemToken
+          : gemToken.toString()
+        : (this._contracts.gemToken as string | undefined)) ?? MAINNET_CONTRACTS.GEM_TOKEN;
+
+    const serials = await this.fetchOwnedSerials(account, token);
+
+    const byLevel: number[][] = [[], [], [], [], [], []];
+    const unmapped: number[] = [];
+    for (const s of serials) {
+      const lvl = gemLevelForSerial(s);
+      if (lvl < 0) unmapped.push(s);
+      else byLevel[lvl].push(s);
+    }
+
+    // Highest-reduction first: LR(40) UR(25) SPE(20) SR(15) R(10) C(5)
+    const order = [4, 3, 5, 2, 1, 0];
+    const holdings = order
+      .filter((lvl) => byLevel[lvl].length > 0)
+      .map((lvl) => ({
+        level: lvl,
+        levelName: GEM_LEVEL_NAMES[lvl],
+        reduction: GEM_LEVEL_REDUCTIONS[lvl],
+        serials: byLevel[lvl],
+      }));
+
+    return {
+      account,
+      token,
+      total: serials.length,
+      holdings,
+      unmapped,
+      bestLevel: holdings.length > 0 ? holdings[0].level : null,
+    };
+  }
+
+  // ============================================================
   // Delegation Operations
   // ============================================================
 
@@ -489,6 +557,30 @@ export class LazyFarmingSDK {
   // ============================================================
   // Private Helpers
   // ============================================================
+
+  private mirrorBaseUrl(): string {
+    return MIRROR_NODE_URLS[this._environment];
+  }
+
+  /** Fetch every NFT serial an account owns of a token via the mirror node (paginated). */
+  private async fetchOwnedSerials(account: string, token: string): Promise<number[]> {
+    const base = this.mirrorBaseUrl();
+    let next: string | null = `/api/v1/tokens/${token}/nfts?account.id=${account}&limit=100`;
+    const serials: number[] = [];
+    while (next) {
+      const res = await fetch(`${base}${next}`);
+      if (!res.ok) {
+        throw new Error(`Mirror node request failed (${res.status}) for ${base}${next}`);
+      }
+      const data = (await res.json()) as {
+        nfts?: Array<{ serial_number: number }>;
+        links?: { next?: string | null };
+      };
+      for (const nft of data.nfts ?? []) serials.push(Number(nft.serial_number));
+      next = data.links?.next ?? null;
+    }
+    return serials.sort((a, b) => a - b);
+  }
 
   private resolveContractId(
     id?: ContractId | string,
