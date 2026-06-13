@@ -1,6 +1,6 @@
 {
   "name": "@lazysuperheroes/farming-sdk",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "TypeScript SDK for Lazy Superheroes NFT farming and staking on Hedera",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -38,7 +38,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lazysuperheroes/hedera-SC-LAZY-Farms.git",
+    "url": "git+https://github.com/lazysuperheroes/hedera-SC-LAZY-Farms.git",
     "directory": "packages/sdk"
   },
   "homepage": "https://github.com/lazysuperheroes/hedera-SC-LAZY-Farms#readme",
