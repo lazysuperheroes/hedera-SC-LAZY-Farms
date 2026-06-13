@@ -16,3 +16,6 @@ yarn.lock
 
 # Claude Code frameworks (exclude all)
 .claude/
+
+# One-off migration scripts (kept local, not tracked)
+scripts/interactions/teardownGemBoostCollections.js
