@@ -2409,7 +2409,7 @@ describe('Launch Missions', () => {
 				gasLim,
 				'claimRewards',
 			);
-			if (result[0]?.status == 'REVERT: No mission active') {
+			if (result[0]?.status?.name == 'NotParticipant') {
 				expectedErrorCount++;
 			}
 			else {
@@ -2441,7 +2441,7 @@ describe('Launch Missions', () => {
 				gasLim,
 				'leaveMission',
 			);
-			if (result[0]?.status == 'REVERT: No mission active') {
+			if (result[0]?.status?.name == 'NotParticipant') {
 				expectedErrorCount++;
 			}
 			else {
@@ -3929,7 +3929,7 @@ describe('Join Missions', () => {
 				[[ReqA_TokenId.toSolidityAddress()], [[1]]],
 			);
 
-			expect(result[0]?.status).to.be.equal('REVERT: Mission paused');
+			expect(result[0]?.status?.name).to.be.equal('MissionPaused');
 		}
 		catch (e) {
 			console.log(e);
@@ -4096,7 +4096,7 @@ describe('Join Missions', () => {
 				'enterMission',
 				[[ReqB_TokenId.toSolidityAddress()], [[11]]],
 			);
-			expect(result[0]?.status).to.be.equal('REVERT: Collection not included');
+			expect(result[0]?.status?.name).to.be.equal('CollectionNotIncluded');
 		}
 		catch (e) {
 			console.log(e);
@@ -4113,7 +4113,7 @@ describe('Join Missions', () => {
 				'enterMission',
 				[[ReqA_TokenId.toSolidityAddress()], [[12, 13]]],
 			);
-			expect(result[0]?.status).to.be.equal('REVERT: Invalid requirement number');
+			expect(result[0]?.status?.name).to.be.equal('InvalidRequirementCount');
 		}
 		catch (e) {
 			console.log(e);
@@ -4406,7 +4406,7 @@ describe('Join Missions', () => {
 				'claimRewards',
 				[],
 			);
-			expect(result[0]?.status).to.be.equal('REVERT: Mission not finished');
+			expect(result[0]?.status?.name).to.be.equal('MissionNotFinished');
 		}
 		catch (e) {
 			console.log(e);
@@ -4797,7 +4797,7 @@ describe('Join Missions', () => {
 					1,
 				],
 			);
-			expect(result[0]?.status).to.be.equal('REVERT: Already initialized');
+			expect(result[0]?.status?.name).to.be.equal('AlreadyInitialized');
 			expectedErrorCount++;
 		}
 		catch (e) {
@@ -5600,7 +5600,7 @@ describe('Join Missions', () => {
 				'enterMission',
 				[[ReqA_TokenId.toSolidityAddress()], [[2]]],
 			);
-			expect(result[0]?.status).to.be.equal('REVERT: Mission not open yet');
+			expect(result[0]?.status?.name).to.be.equal('MissionNotOpen');
 		}
 		catch (e) {
 			console.log(e);
@@ -5737,7 +5737,7 @@ describe('Join Missions', () => {
 				'enterMission',
 				[[ReqA_TokenId.toSolidityAddress()], [[3]]],
 			);
-			expect(result[0]?.status.toString()).to.be.equal('REVERT: Already joined');
+			expect(result[0]?.status?.name).to.be.equal('AlreadyJoined');
 		}
 		catch (e) {
 			console.log(e);
@@ -5835,7 +5835,7 @@ describe('Join Missions', () => {
 				'enterMission',
 				[[ReqA_TokenId.toSolidityAddress()], [[7]]],
 			);
-			expect(result[0]?.status).to.be.equal('REVERT: No more slots available');
+			expect(result[0]?.status?.name).to.be.equal('NoSlotsAvailable');
 		}
 		catch (e) {
 			console.log(e);
@@ -5852,7 +5852,7 @@ describe('Join Missions', () => {
 				'leaveMission',
 				[],
 			);
-			expect(result[0]?.status).to.be.equal('REVERT: No mission active');
+			expect(result[0]?.status?.name).to.be.equal('NotParticipant');
 		}
 		catch (e) {
 			console.log(e);
@@ -5869,7 +5869,7 @@ describe('Join Missions', () => {
 				'claimRewards',
 				[],
 			);
-			expect(result[0]?.status).to.be.equal('REVERT: No mission active');
+			expect(result[0]?.status?.name).to.be.equal('NotParticipant');
 		}
 		catch (e) {
 			console.log(e);
@@ -7711,7 +7711,7 @@ describe('Join Missions', () => {
 				'enterMission',
 				[[ReqB_TokenId.toSolidityAddress()], [[1, 5]]],
 			);
-			expect(result[0]?.status).to.be.equal('REVERT: Serials not authorized');
+			expect(result[0]?.status?.name).to.be.equal('SerialNotAuthorized');
 		}
 		catch (e) {
 			console.log('error entry to I', result);
@@ -7891,6 +7891,195 @@ describe('Join Missions', () => {
 		// expect empty array
 		console.log('J closed Rewards:', rewardsAfter);
 		expect(rewardsAfter[0].length).to.be.equal(0);
+	});
+});
+
+describe('Regression: audit fixes (F1 PRNG bound / F2 slot accounting / F6 zero fee)', () => {
+	// These lock in the 2026-07 audit remediation. They are self-contained: dedicated
+	// NFT collections are minted with the operator as sole treasury AND participant, and
+	// every mission here is ZERO-FEE, so the tests depend on none of the serials/$LAZY
+	// consumed by missions A-J above.
+	//
+	// NOTE (Hedera integration): claims wait out a short real mission duration via sleep().
+	// If a claim ever reverts MissionNotFinished on a slow network, widen the sleep margin.
+	let regReqTokenId;
+	let regRewardTokenId;
+
+	before(async () => {
+		client.setOperator(operatorId, operatorKey);
+		let [status, tokenId] = await mintNFT(client, operatorId, 'Reg Req NFT', 'REGREQ', 10);
+		expect(status).to.be.equal('SUCCESS');
+		regReqTokenId = tokenId;
+
+		[status, tokenId] = await mintNFT(client, operatorId, 'Reg Reward NFT', 'REGRWD', 10);
+		expect(status).to.be.equal('SUCCESS');
+		regRewardTokenId = tokenId;
+	});
+
+	// Deploy a paused, zero-fee, single-requirement / single-reward mission and unpause it.
+	const deployZeroFeeMission = async (durationSeconds) => {
+		client.setOperator(operatorId, operatorKey);
+		const params = [
+			durationSeconds, // _missionDuration
+			0, // _entryFee  <-- F6: zero fee is legitimate and must not brick entry
+			[regReqTokenId.toSolidityAddress()], // _missionRequirements
+			[regRewardTokenId.toSolidityAddress()], // _missionRewards (universe)
+			0, // _feeBurnPercentage
+			Math.floor(new Date().getTime() / 1000) + 900, // _lastEntryTimestamp
+			1, // _numberOfRequirements
+			1, // _numberOfRewards
+		];
+		const [rx, results] = await contractExecuteFunction(
+			factoryContractId,
+			missionFactoryIface,
+			client,
+			3_000_000,
+			'deployMission',
+			params,
+		);
+		expect(rx.status.toString()).to.be.equal('SUCCESS');
+
+		const missionContract = ContractId.fromEvmAddress(0, 0, results[0]);
+		await sleep(7500);
+		const mission = await missionContract.populateAccountNum(client);
+
+		// missions start paused; unpause so entry is allowed (operator is the creator)
+		const unpause = await contractExecuteFunction(
+			mission,
+			missionIface,
+			client,
+			1_000_000,
+			'updatePauseStatus',
+			[false],
+		);
+		expect(unpause[0].status.toString()).to.be.equal('SUCCESS');
+		return mission;
+	};
+
+	// operator funds `serials` of the reward token into `mission` (sets approval-for-all first)
+	const fundRewards = async (mission, serials) => {
+		client.setOperator(operatorId, operatorKey);
+		const approve = await setNFTAllowanceAll(
+			client,
+			[regRewardTokenId],
+			operatorId,
+			AccountId.fromString(`0.0.${mission.num}`),
+		);
+		expect(approve).to.be.equal('SUCCESS');
+		const res = await contractExecuteFunction(
+			mission,
+			missionIface,
+			client,
+			3_000_000,
+			'addRewardSerials',
+			[regRewardTokenId.toSolidityAddress(), serials],
+		);
+		expect(res[0].status.toString()).to.be.equal('SUCCESS');
+	};
+
+	// operator enters `mission` staking requirement serial `reqSerial`
+	const enter = async (mission, reqSerial) => {
+		client.setOperator(operatorId, operatorKey);
+		const approve = await setNFTAllowanceAll(
+			client,
+			[regReqTokenId],
+			operatorId,
+			AccountId.fromString(`0.0.${mission.num}`),
+		);
+		expect(approve).to.be.equal('SUCCESS');
+		// WITHDRAWAL transfers (claimRewards -> leaveMission) pull 1 tinybar per NFT move from
+		// the participant via an HBAR allowance (moveNFTs sets isApproval on the hbar leg), so
+		// grant one to the mission or the eventual claim reverts NFTTransferFailed(WITHDRAWAL).
+		// Mirrors the setHbarAllowance grants the main A-J suite makes before its claims.
+		await setHbarAllowance(client, operatorId, AccountId.fromString(`0.0.${mission.num}`), 10);
+		return contractExecuteFunction(
+			mission,
+			missionIface,
+			client,
+			2_000_000,
+			'enterMission',
+			[[regReqTokenId.toSolidityAddress()], [[reqSerial]]],
+		);
+	};
+
+	it('F6: enterMission succeeds when entryFee == 0 (previously reverted on the zero-amount LAZY draw)', async () => {
+		const mission = await deployZeroFeeMission(20);
+		await fundRewards(mission, [1]); // slots -> 1
+
+		const fee = await contractExecuteQuery(mission, missionIface, client, null, 'entryFee');
+		expect(Number(fee[0])).to.be.equal(0);
+
+		const result = await enter(mission, 1);
+		if (result[0]?.status?.toString() !== 'SUCCESS') console.log('F6 enter result:', result);
+		expect(result[0].status.toString()).to.be.equal('SUCCESS');
+	});
+
+	it('F1: single-serial reward pool claim does not revert on the PRNG boundary', async () => {
+		const mission = await deployZeroFeeMission(15);
+		await fundRewards(mission, [2]);
+
+		const enterRes = await enter(mission, 2);
+		expect(enterRes[0].status.toString()).to.be.equal('SUCCESS');
+
+		// wait out the short mission duration before claiming
+		await sleep(20000);
+
+		const claim = await contractExecuteFunction(
+			mission,
+			missionIface,
+			client,
+			3_000_000,
+			'claimRewards',
+			[],
+		);
+		if (claim[0]?.status?.toString() !== 'SUCCESS') console.log('F1 claim result:', claim);
+		// Pre-fix, getPseudorandomNumber(0, length, ...) could return `length` and panic-revert
+		// ~50% of the time on a single-collection/single-serial pool. Post-fix it is reliable.
+		expect(claim[0].status.toString()).to.be.equal('SUCCESS');
+
+		// reward pool is now empty
+		const rewards = await contractExecuteQuery(mission, missionIface, client, null, 'getRewards');
+		expect(rewards[0].length).to.be.equal(0);
+	});
+
+	it('F2: claim decrements totalSerialsAsRewards so a later addRewardSerials cannot over-subscribe', async () => {
+		const mission = await deployZeroFeeMission(15);
+		await fundRewards(mission, [3]); // pool = 1 serial, slots = 1
+
+		let slots = await contractExecuteQuery(mission, missionIface, client, null, 'getSlotsRemaining');
+		expect(Number(slots[0])).to.be.equal(1);
+
+		const enterRes = await enter(mission, 3);
+		expect(enterRes[0].status.toString()).to.be.equal('SUCCESS');
+
+		await sleep(20000);
+
+		const claim = await contractExecuteFunction(
+			mission,
+			missionIface,
+			client,
+			3_000_000,
+			'claimRewards',
+			[],
+		);
+		expect(claim[0].status.toString()).to.be.equal('SUCCESS');
+
+		// Pool is now empty and the participant has left (claim -> leaveMission), so
+		// activeParticipants is back to 0. Add ONE fresh serial: with the fix,
+		// totalSerialsAsRewards was decremented to 0 on claim, so slots recompute to exactly 1.
+		// Pre-fix the stale counter (still 1) would resurrect a slot and report 2.
+		const topUp = await contractExecuteFunction(
+			mission,
+			missionIface,
+			client,
+			3_000_000,
+			'addRewardSerials',
+			[regRewardTokenId.toSolidityAddress(), [4]],
+		);
+		expect(topUp[0].status.toString()).to.be.equal('SUCCESS');
+
+		slots = await contractExecuteQuery(mission, missionIface, client, null, 'getSlotsRemaining');
+		expect(Number(slots[0])).to.be.equal(1);
 	});
 });
 
