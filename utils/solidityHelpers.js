@@ -1,7 +1,7 @@
 const ethers = require('ethers');
 const axios = require('axios');
 const dotenv = require('dotenv');
-const { ContractCallQuery, Client, TransactionRecordQuery, ContractExecuteTransaction, ContractCreateFlow, AccountId, ContractId } = require('@hashgraph/sdk');
+const { ContractCallQuery, Client, TransactionRecordQuery, ContractExecuteTransaction, ContractCreateFlow, AccountId, ContractId, Hbar } = require('@hashgraph/sdk');
 const { getBaseURL } = require('./hederaMirrorHelpers');
 dotenv.config();
 
@@ -361,9 +361,17 @@ function linkBytecode(bytecode, libNameArray, libAddressArray) {
  * @param {String} bytecode
  * @param {Number} gasLim
  * @param {ContractFunctionParameters} params
+ * @param {Number} maxTxFeeHbar ceiling (in HBAR) for the underlying file/create txns; default 50
  * @returns {[ContractId, ContractAddress]} an array of the contractId and contractAddress as a string
  */
-async function contractDeployFunction(client, bytecode, gasLim = 800_000, params = null) {
+async function contractDeployFunction(client, bytecode, gasLim = 800_000, params = null, maxTxFeeHbar = 50) {
+	// ContractCreateFlow runs FileCreate + FileAppend + ContractCreate under the hood. Those
+	// child transactions take their fee ceiling from the client's default max tx fee (the flow
+	// object exposes no setMaxTransactionFee), and the SDK's built-in 2 HBAR default is not
+	// enough to FileAppend a large contract's bytecode when the HBAR price is low -> the append
+	// fails with INSUFFICIENT_TX_FEE. Raise the ceiling here; it is a cap, not the actual charge.
+	client.setDefaultMaxTransactionFee(new Hbar(maxTxFeeHbar));
+
 	const contractCreateTx = new ContractCreateFlow()
 		.setBytecode(bytecode)
 		.setGas(gasLim);

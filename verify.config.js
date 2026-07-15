@@ -12,5 +12,9 @@
 module.exports = {
 	registry: [
 		{ contractName: 'PrngSystemContract', envVars: ['PRNG_CONTRACT_ID'] },
+		// Mission is the clone master (template). Its source lives at contracts/Mission.sol,
+		// so the default <ContractName>.sol path applies (no sourceName). Set
+		// MISSION_TEMPLATE_CONTRACT_ID in .env after a redeploy for the harness to pick it up.
+		{ contractName: 'Mission', envVars: ['MISSION_TEMPLATE_CONTRACT_ID'] },
 	],
 };

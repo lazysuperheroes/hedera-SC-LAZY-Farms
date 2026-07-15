@@ -7,7 +7,8 @@ const {
 const fs = require('fs');
 const { ethers } = require('ethers');
 const readlineSync = require('readline-sync');
-const { contractDeployFunction, contractExecuteFunction } = require('../../utils/solidityHelpers');
+const { contractDeployFunction, contractExecuteFunction, contractExecuteQuery } = require('../../utils/solidityHelpers');
+const { verifyContract } = require('@lazysuperheroes/hedera-verify');
 // const { hethers } = require('@hashgraph/hethers');
 require('dotenv').config();
 
@@ -88,7 +89,10 @@ const main = async () => {
 		return;
 	}
 
-	const gasLimit = 1_500_000;
+	// Mission is a large contract (near the 24KB EIP-170 ceiling); code deposit alone is
+	// ~200 gas/byte. 6.5M matches the Mission-template deploy in deployLazyFarms.js — the
+	// prior 1.5M here was a copy-paste from a smaller step and reverted with INSUFFICIENT_GAS.
+	const gasLimit = 6_500_000;
 
 	// deploy mission template
 	const missionTemplateJson = JSON.parse(
@@ -116,6 +120,9 @@ const main = async () => {
 		`Mission Template contract created with ID: ${missionTemplateId} / ${missionTemplateId.toSolidityAddress()}`,
 	);
 
+	console.log('\nSave the following line to your .env (used by verify.config.js / hedera-verify harness):');
+	console.log(`   MISSION_TEMPLATE_CONTRACT_ID=${missionTemplateId.toString()}`);
+
 	// now update the mission Factory with the new mission template
 	const missionFactoryJson = JSON.parse(
 		fs.readFileSync(
@@ -140,6 +147,62 @@ const main = async () => {
 	}
 
 	console.log('Mission Factory connected to Mission Template:', rslt[2].transactionId.toString());
+
+	// verify the swap actually took effect by reading the factory's missionTemplate getter
+	const templateCheck = await contractExecuteQuery(
+		factoryContractId,
+		missionFactoryIface,
+		client,
+		null,
+		'missionTemplate',
+	);
+
+	const onChainTemplate = String(templateCheck[0]).toLowerCase();
+	const expectedTemplate = ('0x' + missionTemplateId.toSolidityAddress()).toLowerCase();
+
+	if (onChainTemplate === expectedTemplate) {
+		console.log(`\n✅ Verified: factory.missionTemplate() == ${templateCheck[0]} (new template)`);
+	}
+	else {
+		console.log(`\n❌ MISMATCH: factory.missionTemplate() == ${templateCheck[0]} but expected ${expectedTemplate}`);
+		console.log('   The update transaction reported SUCCESS but the getter does not match - investigate before relying on it.');
+		process.exitCode = 1;
+	}
+
+	// Optional source verification on Sourcify (read-only — publishes source publicly).
+	// Gated on VERIFY_ON_DEPLOY, wrapped in try/catch so a verification hiccup never masks a
+	// successful deploy. Verifies the freshly deployed Mission template (the clone master).
+	if (process.env.VERIFY_ON_DEPLOY === 'true' || process.env.VERIFY_ON_DEPLOY === '1') {
+		console.log('\n- VERIFY_ON_DEPLOY set — verifying the Mission template on Sourcify (gives the mirror node a few seconds to index)...');
+		try {
+			const result = await verifyContract({
+				contractName: missionTemplateName,
+				env,
+				contractId: missionTemplateId.toString(),
+				initialDelayMs: 10_000,
+				attempts: 4,
+				retryDelayMs: 8_000,
+			});
+			console.log(`   Sourcify status : ${result.status}${result.match ? ` (${result.match})` : ''}`);
+			if (result.message) console.log(`   Detail          : ${result.message}`);
+			if (result.hashscanUrl) console.log(`   HashScan        : ${result.hashscanUrl}`);
+			if (result.repoUrl) console.log(`   Sourcify repo   : ${result.repoUrl}`);
+			// A fresh mainnet contract can out-run the mirror node / Sourcify index window,
+			// returning 'error' or 'pending' here. That's transient — just re-run the CLI.
+			if (result.status !== 'verified' && result.status !== 'already_verified') {
+				console.log(`   Not yet verified — retry shortly with: npx hedera-verify ${missionTemplateName} ${missionTemplateId.toString()}`);
+			}
+		}
+		catch (err) {
+			console.log('   WARNING: verification failed — deploy still succeeded. You can retry later.');
+			console.log('  ', err.message);
+			console.log(`   Retry with: npx hedera-verify ${missionTemplateName} ${missionTemplateId.toString()}`);
+		}
+	}
+	else {
+		console.log('\n- Skipping Sourcify verification (set VERIFY_ON_DEPLOY=true to enable).');
+		console.log(`   Verify later with: npx hedera-verify ${missionTemplateName} ${missionTemplateId.toString()}`);
+	}
 
 };
 
