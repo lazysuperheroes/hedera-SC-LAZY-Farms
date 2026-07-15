@@ -30,6 +30,20 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
     using SafeCast for uint256;
 
     error UsersOnMission();
+    error OnlyEOA();
+    error NotParticipant();
+    error AlreadyInitialized();
+    error MissionPaused();
+    error NoSlotsAvailable();
+    error MissionNotOpen();
+    error MissionClosed();
+    error AlreadyJoined();
+    error CollectionNotIncluded();
+    error SerialNotAuthorized();
+    error InvalidRequirementCount();
+    error MissionNotFinished();
+    error NoStakingFound();
+    error TransferFailed();
 
     event FallbackEvent(address, address, string);
     event MissionCompleted(address indexed wallet, uint256 timestamp);
@@ -88,10 +102,8 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
     EnumerableSet.AddressSet private missionParticipantsSet;
 
     modifier onlyParticipant() {
-        require(
-            missionParticipants[msg.sender].endOfMission != 0,
-            "No mission active"
-        );
+        if (missionParticipants[msg.sender].endOfMission == 0)
+            revert NotParticipant();
         _;
     }
 
@@ -135,7 +147,7 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         uint8 _numberOfRequirements,
         uint8 _numberOfRewards
     ) external {
-        require(!isInitialized, "Already initialized");
+        if (isInitialized) revert AlreadyInitialized();
         if (
             _missionDuration == 0 ||
             _numberOfRewards == 0 ||
@@ -398,25 +410,23 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         address[] memory _collectionAddress,
         uint256[][] memory _serials
     ) external {
-        require(!isPaused, "Mission paused");
-        require(
-            slotsAvailable != 0 && slotsAvailable > activeParticipants,
-            "No more slots available"
-        );
-        require(
-            missionState.startTimestamp == 0 ||
-                block.timestamp > missionState.startTimestamp,
-            "Mission not open yet"
-        );
-        require(
-            block.timestamp < missionState.lastEntryTimestamp,
-            "Mission closed"
-        );
+        // Restrict entry to externally-owned accounts. A contract participant can grind
+        // claimRewards() across transactions (revert on an unfavourable draw, retry with
+        // a fresh PRNG seed) to cherry-pick high-value reward serials. An EOA cannot
+        // inspect the drawn serial and then revert, so this closes the grinding vector.
+        if (msg.sender != tx.origin) revert OnlyEOA();
+        if (isPaused) revert MissionPaused();
+        if (slotsAvailable == 0 || slotsAvailable <= activeParticipants)
+            revert NoSlotsAvailable();
+        if (
+            missionState.startTimestamp != 0 &&
+            block.timestamp <= missionState.startTimestamp
+        ) revert MissionNotOpen();
+        if (block.timestamp >= missionState.lastEntryTimestamp)
+            revert MissionClosed();
 
-        require(
-            missionParticipants[msg.sender].endOfMission == 0,
-            "Already joined"
-        );
+        if (missionParticipants[msg.sender].endOfMission != 0)
+            revert AlreadyJoined();
 
         // block off the slot early. If the staking fails, the slot will be freed up again
         activeParticipants++;
@@ -425,29 +435,32 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
 
         broadcastSlotsRemaining(slotsAvailable - activeParticipants);
 
-        lazyGasStation.drawLazyFrom(
-            msg.sender,
-            entryFee(),
-            missionState.feeBurnPercentage
-        );
+        // A zero fee is legitimate (a free/promotional mission, or a decreasing-fee
+        // auction that has decayed to 0). LazyGasStation reverts on a zero-amount draw,
+        // which would otherwise brick enterMission for everyone, so skip the draw.
+        uint256 fee = entryFee();
+        if (fee > 0) {
+            lazyGasStation.drawLazyFrom(
+                msg.sender,
+                fee,
+                missionState.feeBurnPercentage
+            );
+        }
 
         uint256 totalSerials = 0;
         //check if serials are allowed + number of serials matches the number of requirements
         for (uint256 i = 0; i < _collectionAddress.length; i++) {
-            require(
-                missionRequirementsSet.contains(_collectionAddress[i]),
-                "Collection not included"
-            );
+            if (!missionRequirementsSet.contains(_collectionAddress[i]))
+                revert CollectionNotIncluded();
 
             // if serials are limited check they are all valid
             if (missionRequirements[_collectionAddress[i]].limitedSerials) {
                 for (uint256 j = 0; j < _serials[i].length; j++) {
-                    require(
-                        missionRequirements[_collectionAddress[i]]
+                    if (
+                        !missionRequirements[_collectionAddress[i]]
                             .serials
-                            .contains(_serials[i][j]),
-                        "Serials not authorized"
-                    );
+                            .contains(_serials[i][j])
+                    ) revert SerialNotAuthorized();
                 }
             }
 
@@ -463,10 +476,8 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
             totalSerials += _serials[i].length;
         }
 
-        require(
-            totalSerials == missionState.nbOfRequirements,
-            "Invalid requirement number"
-        );
+        if (totalSerials != missionState.nbOfRequirements)
+            revert InvalidRequirementCount();
 
         //Add participant to the mission
         missionParticipants[msg.sender] = MissionParticipation(
@@ -629,19 +640,21 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
      *      Reverts if mission duration has not elapsed.
      */
     function claimRewards() external onlyParticipant nonReentrant {
-        require(
-            block.timestamp >= missionParticipants[msg.sender].endOfMission,
-            "Mission not finished"
-        );
+        if (block.timestamp < missionParticipants[msg.sender].endOfMission)
+            revert MissionNotFinished();
 
         for (uint256 i = 0; i < missionState.nbOfRewards; i++) {
+            // PRNG range is INCLUSIVE, so the upper bound must be length - 1 (passing the
+            // raw length was the off-by-one that reverted claims ~50% of the time). An
+            // empty pool makes the subtraction underflow and revert, which is the correct
+            // "nothing to claim" outcome and can never index out of bounds.
             uint256 randRewardIndex = IPrngSystemContract(prngGenerator)
-                .getPseudorandomNumber(0, missionRewardsSet.length(), 0);
+                .getPseudorandomNumber(0, missionRewardsSet.length() - 1, 0);
             address rewardAddress = missionRewardsSet.at(randRewardIndex);
             uint256 randSerialIndex = IPrngSystemContract(prngGenerator)
                 .getPseudorandomNumber(
                     0,
-                    missionRewards[rewardAddress].length,
+                    missionRewards[rewardAddress].length - 1,
                     1
                 );
 
@@ -675,6 +688,10 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
 
         //if rewards are claimed the slots available should be decremented
         slotsAvailable--;
+        // Mirror the slot decrement in the serial counter (one write per claim) so later
+        // slotsAvailable recomputes in addRewardSerials / withdrawRewards reflect the true
+        // remaining pool instead of a stale high-water mark, preventing over-subscription.
+        missionState.totalSerialsAsRewards -= missionState.nbOfRewards;
 
         // action to leave is seperated to allow the user an emergency escape hatch
         leaveMission();
@@ -728,12 +745,10 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         address _wallet,
         uint256 _boostReduction
     ) external onlyBooster returns (uint256, uint256) {
-        require(
-            missionParticipants[_wallet].endOfMission != 0,
-            "No staking found"
-        );
+        if (missionParticipants[_wallet].endOfMission == 0)
+            revert NoStakingFound();
 
-        require(_boostReduction <= 100, "Invalid arg");
+        if (_boostReduction > 100) revert BadArgument();
 
         uint256 boostAmount = 100 - _boostReduction;
 
@@ -794,7 +809,7 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
                 address(missionFactory),
                 IERC20(lazyToken).balanceOf(address(this))
             );
-            require(result, "Tfr fail");
+            if (!result) revert TransferFailed();
         }
 
         // send any hbar to the MissionFactory
@@ -943,8 +958,8 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         uint32 _decrementAmount,
         uint32 _decrementInterval
     ) external onlyAdminOrCreator {
-        require(_decrementAmount > 0, "Decrement amount > 0");
-        require(_decrementInterval > 0, "Decrement interval > 0");
+        if (_decrementAmount == 0) revert BadArgument();
+        if (_decrementInterval == 0) revert BadArgument();
 
         missionState.startTimestamp = _startTimestamp;
         missionState.minEntryFee = _minEntryFee;
@@ -978,7 +993,7 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         uint256 amount
     ) external onlyAdminOrCreator {
         if (receiverAddress == address(0) || amount == 0) {
-            revert("Invalid address or amount");
+            revert BadArgument();
         }
 
         // only allow hbar to be transferred when there are no active participants
@@ -1004,7 +1019,7 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
             revert UsersOnMission();
         }
         if (_receiver == address(0) || _amount == 0) {
-            revert("Invalid address or amt");
+            revert BadArgument();
         }
 
         int256 responseCode = transferToken(
@@ -1015,7 +1030,7 @@ contract Mission is TokenStaker, IMission, IRoles, ReentrancyGuard {
         );
 
         if (responseCode != HederaResponseCodes.SUCCESS) {
-            revert("transferHTS - fail");
+            revert TransferFailed();
         }
     }
 

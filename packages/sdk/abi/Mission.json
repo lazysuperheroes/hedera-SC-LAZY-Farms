@@ -1,6 +1,16 @@
 [
     {
         "inputs": [],
+        "name": "AlreadyInitialized",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "AlreadyJoined",
+        "type": "error"
+    },
+    {
+        "inputs": [],
         "name": "AssociationFailed",
         "type": "error"
     },
@@ -21,7 +31,37 @@
     },
     {
         "inputs": [],
+        "name": "CollectionNotIncluded",
+        "type": "error"
+    },
+    {
+        "inputs": [],
         "name": "FailedToInitialize",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "InvalidRequirementCount",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "MissionClosed",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "MissionNotFinished",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "MissionNotOpen",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "MissionPaused",
         "type": "error"
     },
     {
@@ -33,6 +73,26 @@
             }
         ],
         "name": "NFTTransferFailed",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "NoSlotsAvailable",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "NoStakingFound",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "NotParticipant",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "OnlyEOA",
         "type": "error"
     },
     {
@@ -49,6 +109,16 @@
             }
         ],
         "name": "PermissionDenied",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "SerialNotAuthorized",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "TransferFailed",
         "type": "error"
     },
     {
