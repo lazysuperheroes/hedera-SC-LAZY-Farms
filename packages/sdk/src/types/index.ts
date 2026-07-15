@@ -266,8 +266,10 @@ export interface TransactionResult<T = unknown> {
   transactionId: string;
   /** Decoded result data */
   data?: T;
-  /** Error message if failed */
+  /** Error message if failed (decoded revert reason where possible) */
   error?: string;
+  /** Decoded custom-error name if the call reverted (e.g. "OnlyEOA", "NoSlotsAvailable") */
+  errorName?: string;
   /** Gas used */
   gasUsed?: number;
 }

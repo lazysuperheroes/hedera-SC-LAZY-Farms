@@ -19,8 +19,8 @@ export const GAS = {
   /** Mission exit */
   MISSION_LEAVE: 1_500_000,
 
-  /** Mission claim */
-  MISSION_CLAIM: 1_500_000,
+  /** Mission claim (PRNG draw + reward NFT transfer + leaveMission) */
+  MISSION_CLAIM: 2_500_000,
 
   /** Base gas for staking */
   STAKE_BASE: 400_000,
@@ -121,8 +121,12 @@ export const MAINNET_CONTRACTS = {
   /** MissionFactory */
   MISSION_FACTORY: '0.0.8257122',
 
-  /** Mission Template */
-  MISSION_TEMPLATE: '0.0.8257118',
+  /**
+   * Mission Template (clone master) — audit-fixed template redeployed 2026-07-15;
+   * factory repointed via scripts/deployments/configureFarms-NewMissionTemplate.js.
+   * The MissionFactory address is unchanged by the redeploy.
+   */
+  MISSION_TEMPLATE: '0.0.10646220',
 
   /** BoostManager */
   BOOST_MANAGER: '0.0.8257105',

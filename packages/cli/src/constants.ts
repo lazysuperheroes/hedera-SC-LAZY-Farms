@@ -22,7 +22,8 @@ export const MAINNET_CONTRACTS = {
   DELEGATE_REGISTRY: '0.0.7221486',
   NFT_STAKING: '0.0.7221488',
   MISSION_FACTORY: '0.0.8257122',
-  MISSION_TEMPLATE: '0.0.8257118',
+  // audit-fixed template redeployed 2026-07-15; factory repointed. Factory unchanged.
+  MISSION_TEMPLATE: '0.0.10646220',
   BOOST_MANAGER: '0.0.8257105',
   PRNG: '0.0.10583667',
   GEM_TOKEN: '0.0.10580248',

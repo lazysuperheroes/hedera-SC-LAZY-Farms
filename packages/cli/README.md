@@ -225,7 +225,7 @@ lazy-farm info --json
 | LazyDelegateRegistry | `0.0.7221486` |
 | LazyNFTStaking | `0.0.7221488` |
 | MissionFactory | `0.0.8257122` |
-| Mission Template | `0.0.8257118` |
+| Mission Template | `0.0.10646220` |
 | BoostManager | `0.0.8257105` |
 | PRNG | `0.0.8257116` |
 

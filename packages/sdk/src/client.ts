@@ -11,8 +11,10 @@ import {
   PrivateKey,
   ContractCallQuery,
   ContractExecuteTransaction,
+  TransactionRecordQuery,
 } from '@hashgraph/sdk';
-import { Interface } from 'ethers';
+import type { TransactionId, TransactionResponse } from '@hashgraph/sdk';
+import { Interface, AbiCoder } from 'ethers';
 import type {
   SDKConfig,
   NetworkEnvironment,
@@ -37,13 +39,12 @@ import {
 import { generateStakingRewardProof, validateStake } from './helpers/staking';
 
 // ABI imports - loaded at runtime to avoid bundling issues
-/* eslint-disable @typescript-eslint/no-var-requires */
+// (require() for JSON ABIs is intentional; the rule is disabled in eslint.config.mjs)
 const LazyNFTStakingABI = require('../abi/LazyNFTStaking.json');
 const MissionABI = require('../abi/Mission.json');
 const MissionFactoryABI = require('../abi/MissionFactory.json');
 const BoostManagerABI = require('../abi/BoostManager.json');
 const LazyDelegateRegistryABI = require('../abi/LazyDelegateRegistry.json');
-/* eslint-enable @typescript-eslint/no-var-requires */
 
 /**
  * Create a Lazy Farming SDK client
@@ -356,7 +357,11 @@ export class LazyFarmingSDK {
   }
 
   /**
-   * Enter a mission
+   * Enter a mission.
+   *
+   * Must be sent directly from an externally-owned account (this client's operator).
+   * The contract restricts entry to EOAs and reverts `OnlyEOA` otherwise, so routing
+   * this call through a contract / multicall / smart-wallet will fail.
    */
   async enterMission(
     missionId: ContractId | string,
@@ -371,7 +376,9 @@ export class LazyFarmingSDK {
       id,
       this._missionIface,
       'enterMission',
-      [tokenId.toSolidityAddress(), serials],
+      // Contract signature: enterMission(address[] collections, uint256[][] serials).
+      // Wrap the single-collection ergonomic args into the array-of-arrays it expects.
+      [[tokenId.toSolidityAddress()], [serials]],
       GAS.MISSION_ENTER
     );
   }
@@ -386,7 +393,11 @@ export class LazyFarmingSDK {
   }
 
   /**
-   * Claim mission rewards
+   * Claim mission rewards (participant flow).
+   *
+   * Calls the user-facing `claimRewards()`, which draws the randomized reward NFT(s) and
+   * returns the staked NFTs. `withdrawRewards` is admin-only (pulls unclaimed rewards when
+   * there are no active participants) and must not be used for a participant claim.
    */
   async claimMissionRewards(missionId: ContractId | string): Promise<TransactionResult> {
     const id = this.resolveContractId(missionId);
@@ -394,8 +405,8 @@ export class LazyFarmingSDK {
     return this.executeContract(
       id,
       this._missionIface,
-      'withdrawRewards',
-      [[]],
+      'claimRewards',
+      [],
       GAS.MISSION_CLAIM
     );
   }
@@ -621,8 +632,9 @@ export class LazyFarmingSDK {
   ): Promise<TransactionResult> {
     const encodedCall = iface.encodeFunctionData(fcnName, params);
 
+    let tx: TransactionResponse | undefined;
     try {
-      const tx = await new ContractExecuteTransaction()
+      tx = await new ContractExecuteTransaction()
         .setContractId(contractId)
         .setFunctionParameters(Buffer.from(encodedCall.slice(2), 'hex'))
         .setGas(gas)
@@ -646,11 +658,67 @@ export class LazyFarmingSDK {
         gasUsed: Number(record.contractFunctionResult?.gasUsed ?? 0),
       };
     } catch (error) {
+      const decoded = await this.decodeRevert(iface, tx?.transactionId, error);
       return {
         success: false,
-        transactionId: '',
-        error: error instanceof Error ? error.message : String(error),
+        transactionId: tx?.transactionId?.toString() ?? '',
+        error: decoded.message,
+        errorName: decoded.name,
       };
     }
+  }
+
+  /**
+   * Best-effort decode of a contract revert. Mission/factory reverts are custom errors
+   * (e.g. OnlyEOA, NoSlotsAvailable), not Error(string), so parse the revert bytes against
+   * the contract interface to surface a typed name alongside a readable message.
+   */
+  private async decodeRevert(
+    iface: Interface,
+    transactionId: TransactionId | undefined,
+    fallback: unknown
+  ): Promise<{ name?: string; message: string }> {
+    const fallbackMsg = fallback instanceof Error ? fallback.message : String(fallback);
+    if (!transactionId) return { message: fallbackMsg };
+
+    let errorBytes: string | undefined;
+    try {
+      const record = await new TransactionRecordQuery()
+        .setTransactionId(transactionId)
+        .setValidateReceiptStatus(false)
+        .execute(this._client);
+      errorBytes = record.contractFunctionResult?.errorMessage ?? undefined;
+    } catch {
+      return { message: fallbackMsg };
+    }
+
+    if (!errorBytes) return { message: fallbackMsg };
+    if (!errorBytes.startsWith('0x')) errorBytes = `0x${errorBytes}`;
+    if (errorBytes.length < 10) return { message: fallbackMsg };
+
+    // Standard Error(string) revert
+    if (errorBytes.startsWith('0x08c379a0')) {
+      try {
+        const [reason] = AbiCoder.defaultAbiCoder().decode(['string'], `0x${errorBytes.slice(10)}`);
+        return { message: `REVERT: ${String(reason)}` };
+      } catch {
+        // fall through to custom-error parsing
+      }
+    }
+
+    // Custom error (Mission / MissionFactory / etc.)
+    try {
+      const parsed = iface.parseError(errorBytes);
+      if (parsed) {
+        const args = parsed.args.length
+          ? `(${parsed.args.map((a) => String(a)).join(', ')})`
+          : '';
+        return { name: parsed.name, message: `${parsed.name}${args}` };
+      }
+    } catch {
+      // not decodable against this interface
+    }
+
+    return { message: fallbackMsg };
   }
 }
