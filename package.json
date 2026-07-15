@@ -47,11 +47,11 @@
    },
    "dependencies": {
       "@directus/sdk": "^15",
-      "@hashgraph/sdk": "2.79.0",
+      "@hashgraph/sdk": "2.81.0",
       "@lazysuperheroes/hedera-multisig": "^1.2.2",
       "@openzeppelin/contracts": "^4.6.0",
       "abi-decoder": "^2.4.0",
-      "axios": "1.13.2",
+      "axios": "1.18.1",
       "dotenv": "^16.0.3",
       "dotenv-types": "^1.0.0",
       "ethers": "6.16.0",
