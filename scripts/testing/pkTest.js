@@ -1,6 +1,6 @@
 const { PrivateKey, TokenId, AccountId, Client, ContractId } = require('@hashgraph/sdk');
 const ethers = require('ethers');
-const { Stake, generateStakingRewardProof } = require('../../utils/LazyNFTStakingHelper');
+const { Stake, generateStakingRewardProof, layoutStakesForSigning } = require('../../utils/LazyNFTStakingHelper');
 const { contractExecuteQuery } = require('../../utils/solidityHelpers');
 const fs = require('fs');
 require('dotenv').config();
@@ -40,9 +40,11 @@ async function main() {
 	stakes.push(new Stake(StkNFTA_TokenId.toSolidityAddress(), [1, 2], [1, 1]));
 	stakes.push(new Stake(StkNFTB_TokenId.toSolidityAddress(), [3, 4], [2, 2]));
 	stakes.push(new Stake(StkNFTC_TokenId.toSolidityAddress(), [5], [100]));
+	// signing layout (no caps passed, so one serial per entry)
+	const signedStakes = layoutStakesForSigning(stakes);
 
 	// to create the signature we need to pack the variables and hash them in the same order and manner as the contract
-	let rewardProof = await generateStakingRewardProof(operatorId, boostRate, signingWallet, stakes);
+	let rewardProof = await generateStakingRewardProof(operatorId, boostRate, signingWallet, signedStakes);
 
 	console.log('Reward proof:', rewardProof);
 
@@ -50,7 +52,7 @@ async function main() {
 
 	console.log('doped Reward proof:', rewardProof);
 
-	rewardProof = await generateStakingRewardProof(operatorId, 0, signingWallet, stakes);
+	rewardProof = await generateStakingRewardProof(operatorId, 0, signingWallet, signedStakes);
 
 	console.log('Refreshed Reward proof:', rewardProof);
 
@@ -75,7 +77,7 @@ async function main() {
 		client,
 		null,
 		'testSignature',
-		[stakes, rewardProof],
+		[signedStakes, rewardProof],
 	);
 
 	console.log('Result:', result);

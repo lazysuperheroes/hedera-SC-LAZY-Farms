@@ -7,7 +7,8 @@ const { ContractId, TokenId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
 const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseNestedList, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
-const { generateStakingRewardProof, Stake } = require('../../utils/LazyNFTStakingHelper');
+const { generateStakingRewardProof, layoutStakesForSigning, Stake } = require('../../utils/LazyNFTStakingHelper');
+const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
 const { calculateStakeGas } = require('../../utils/constants');
 
 const main = async () => {
@@ -61,10 +62,22 @@ const main = async () => {
 		console.log('Preparing to Stake:', stakes[i]);
 	}
 
-	// Generate signature proof
-	const rewardProof = await generateStakingRewardProof(operatorId, boostRate, signingKey, stakes);
 
-	const gas = calculateStakeGas(tokenList.length);
+	// On-chain rate caps let the signing layout group large serials (see layoutStakesForSigning);
+	// the signed entries are what gets submitted.
+	const maxBaseRates = {};
+	for (const token of tokenList) {
+		const addr = '0x' + token.toSolidityAddress();
+		const res = await readOnlyEVMFromMirrorNode(env, contractId, lnsIface.encodeFunctionData('getMaxBaseRate', [addr]), operatorId, false);
+		maxBaseRates[addr] = Number(lnsIface.decodeFunctionResult('getMaxBaseRate', res)[0]);
+	}
+	const signedStakes = layoutStakesForSigning(stakes, maxBaseRates);
+	console.log('Signed entries:', JSON.stringify(signedStakes));
+
+	// Generate signature proof
+	const rewardProof = await generateStakingRewardProof(operatorId, boostRate, signingKey, signedStakes, { maxBaseRates });
+
+	const gas = calculateStakeGas(signedStakes.length);
 
 	const multisigOptions = getMultisigOptions();
 	const result = await contractExecuteWithMultisig(
@@ -73,7 +86,7 @@ const main = async () => {
 		client,
 		gas,
 		'stake',
-		[stakes, rewardProof],
+		[signedStakes, rewardProof],
 		multisigOptions,
 	);
 

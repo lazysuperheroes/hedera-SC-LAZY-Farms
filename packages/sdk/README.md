@@ -116,21 +116,29 @@ for (const collection of collections) {
 ### Stake NFTs
 
 ```typescript
-import { createStake } from '@lazysuperheroes/farming-sdk';
+import { createStake, layoutStakesForSigning } from '@lazysuperheroes/farming-sdk';
+
+const collection = '0x0000000000000000000000000000000000123456'; // Collection EVM address
 
 // Create stake objects (collection must be in EVM address format)
-const stakes = [
+const requested = [
   createStake(
-    '0x0000000000000000000000000000000000123456', // Collection EVM address
+    collection,
     [1, 2, 3],      // Serial numbers
     [100, 100, 100] // Reward rates
   ),
 ];
 
-// Generate reward proof (requires ECDSA signing key)
-const rewardProof = await client.generateRewardProof(0, stakes);
+// Put the stakes in signing layout. Pass each collection's on-chain cap
+// (LazyNFTStaking.getMaxBaseRate) so large serials can share an entry;
+// without caps every serial gets its own entry.
+const maxBaseRates = { [collection]: 450 };
+const stakes = layoutStakesForSigning(requested, maxBaseRates);
 
-// Execute stake
+// Generate reward proof (requires ECDSA signing key)
+const rewardProof = await client.generateRewardProof(0, stakes, { maxBaseRates });
+
+// Execute stake with exactly the entries that were signed
 const result = await client.stake(stakes, rewardProof);
 
 if (result.success) {
@@ -270,10 +278,22 @@ import {
   validateStake,
   countTotalNFTs,
   generateStakingRewardProof,
+  layoutStakesForSigning,
+  assertStakesSigningLayout,
 } from '@lazysuperheroes/farming-sdk';
 
 // Create a stake object
 const stake = createStake(evmAddress, serials, rewards);
+
+// Signing layout: generateStakingRewardProof refuses stakes that aren't in it.
+// In each entry, every serial after the first must exceed
+// max(on-chain maxBaseRate, every rate in the entry).
+const signed = layoutStakesForSigning([stake], { [evmAddress]: maxBaseRate });
+assertStakesSigningLayout(signed, { [evmAddress]: maxBaseRate }); // what the signer checks
+const proof = await generateStakingRewardProof(senderEvm, boostRate, signingKey, signed, {
+  maxBaseRates: { [evmAddress]: maxBaseRate },
+});
+// submit `signed` (not the original stakes) together with `proof`
 
 // Validate stake data
 validateStake(stake); // Throws if invalid

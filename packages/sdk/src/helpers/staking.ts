@@ -48,22 +48,125 @@ export function createStake(
   };
 }
 
+/** Per-collection on-chain rate caps (`getMaxBaseRate`), keyed by collection EVM address. */
+export type MaxBaseRates = Record<string, number>;
+
+const capFor = (maxBaseRates: MaxBaseRates | undefined, collection: string): number | undefined => {
+  if (!maxBaseRates) return undefined;
+  const key = Object.keys(maxBaseRates).find((k) => k.toLowerCase() === collection.toLowerCase());
+  return key === undefined ? undefined : maxBaseRates[key];
+};
+
+/**
+ * Throws unless every entry is in canonical signing layout: in each entry,
+ * every serial after the first must be greater than
+ * max(the collection's on-chain maxBaseRate, every rate in the entry).
+ * Single-serial entries always qualify. Multi-serial entries need the cap.
+ * Build compliant entries with `layoutStakesForSigning`.
+ */
+export function assertStakesSigningLayout(stakes: Stake[], maxBaseRates?: MaxBaseRates): void {
+  for (const stake of stakes) {
+    if (stake.serials.length <= 1) continue;
+    const cap = capFor(maxBaseRates, stake.collection);
+    if (cap === undefined) {
+      throw new Error(
+        `Stake entry for ${stake.collection} has ${stake.serials.length} serials but no maxBaseRate was supplied. ` +
+          'Lay stakes out with layoutStakesForSigning() before signing.'
+      );
+    }
+    const threshold = Math.max(cap, ...stake.rewards);
+    for (let i = 1; i < stake.serials.length; i++) {
+      if (!(stake.serials[i] > threshold)) {
+        throw new Error(
+          `Stake entry for ${stake.collection} is not in signing layout (serial ${stake.serials[i]} at position ${i} ` +
+            `must exceed ${threshold}). Lay stakes out with layoutStakesForSigning() before signing.`
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Lay stakes out for signing. Serials are merged per collection; serials at or
+ * below max(maxBaseRate, rates) each lead their own entry, and larger serials
+ * follow the first entry. Without a cap for a collection, every serial gets
+ * its own entry. Submit the returned array to stake()/unstake() exactly as
+ * signed.
+ *
+ * @param stakes - requested stakes (any grouping)
+ * @param maxBaseRates - on-chain `getMaxBaseRate(collection)` per collection
+ */
+export function layoutStakesForSigning(stakes: Stake[], maxBaseRates?: MaxBaseRates): Stake[] {
+  const byCollection = new Map<string, { collection: string; pairs: { serial: number; reward: number }[] }>();
+  for (const stake of stakes) {
+    validateStake(stake);
+    const key = stake.collection.toLowerCase();
+    const group = byCollection.get(key) ?? { collection: stake.collection, pairs: [] };
+    stake.serials.forEach((serial, i) => {
+      if (group.pairs.some((p) => p.serial === serial)) {
+        throw new Error(`Duplicate serial ${serial} for ${stake.collection}`);
+      }
+      group.pairs.push({ serial, reward: stake.rewards[i] });
+    });
+    byCollection.set(key, group);
+  }
+
+  const result: Stake[] = [];
+  for (const { collection, pairs } of byCollection.values()) {
+    const cap = capFor(maxBaseRates, collection);
+    if (cap === undefined) {
+      pairs.forEach((p) => result.push({ collection, serials: [p.serial], rewards: [p.reward] }));
+      continue;
+    }
+    const threshold = Math.max(cap, ...pairs.map((p) => p.reward));
+    const small = pairs.filter((p) => p.serial <= threshold);
+    const big = pairs.filter((p) => p.serial > threshold);
+    const groups = small.length > 0 ? small.map((p) => [p]) : [[] as { serial: number; reward: number }[]];
+    groups[0].push(...big);
+    groups.forEach((g) =>
+      result.push({ collection, serials: g.map((p) => p.serial), rewards: g.map((p) => p.reward) })
+    );
+  }
+  assertStakesSigningLayout(result, maxBaseRates);
+  return result;
+}
+
+export interface StakingProofOptions {
+  /** On-chain caps, needed to sign multi-serial entries */
+  maxBaseRates?: MaxBaseRates;
+  /**
+   * Skip the layout check. Only for signing for your own account (e.g. tests);
+   * never when signing on behalf of other users.
+   */
+  allowUnsafeLayout?: boolean;
+}
+
 /**
  * Generate a staking reward proof
  * Signs the staking parameters to create a valid proof for the contract
  *
- * @param sender - The account performing the stake (AccountId or EVM address)
+ * The stakes must be in signing layout (see `layoutStakesForSigning`) and must
+ * be submitted to stake()/unstake() exactly as signed.
+ *
+ * @param sender - The account performing the stake (AccountId or EVM address).
+ *   For an ECDSA account with an EVM alias, pass the alias address: the
+ *   contract binds msg.sender, which for those accounts is the alias.
  * @param boostRate - Boost rate multiplier
  * @param signingKey - ECDSA private key for signing
- * @param stakes - Array of stake objects
+ * @param stakes - Array of stake objects, in signing layout
+ * @param options - caps for multi-serial entries; see StakingProofOptions
  * @returns Signed reward proof
  */
 export async function generateStakingRewardProof(
   sender: AccountId | string,
   boostRate: number,
   signingKey: PrivateKey,
-  stakes: Stake[]
+  stakes: Stake[],
+  options: StakingProofOptions = {}
 ): Promise<RewardProof> {
+  if (!options.allowUnsafeLayout) {
+    assertStakesSigningLayout(stakes, options.maxBaseRates);
+  }
   const currentTimestamp = Math.floor(Date.now() / 1000);
 
   // Convert sender to EVM address

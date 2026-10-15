@@ -7,7 +7,10 @@ export {
   generateStakingRewardProof,
   validateStake,
   countTotalNFTs,
+  layoutStakesForSigning,
+  assertStakesSigningLayout,
 } from './staking';
+export type { MaxBaseRates, StakingProofOptions } from './staking';
 
 export {
   lookupLevel,

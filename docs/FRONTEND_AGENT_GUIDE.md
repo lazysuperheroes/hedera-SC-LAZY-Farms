@@ -75,11 +75,11 @@ User Wallet
 
 | Contract | Hedera ID | EVM Address | ABI File |
 |----------|-----------|-------------|----------|
-| $LAZY Token | `0.0.1311037` | `0x000000000000000000000000000000000013ffed` | N/A (ERC-20) |
-| LAZY Token Creator (SCT) | `0.0.1311003` | `0x000000000000000000000000000000000013ffab` | N/A |
-| LazyGasStation | `0.0.7221483` | `0x00000000000000000000000000000000006e376b` | `abi/LazyGasStation.json` |
-| LazyDelegateRegistry | `0.0.7221486` | `0x00000000000000000000000000000000006e376e` | `abi/LazyDelegateRegistry.json` |
-| LazyNFTStaking | `0.0.7221488` | `0x00000000000000000000000000000000006e3770` | `abi/LazyNFTStaking.json` |
+| $LAZY Token | `0.0.1311037` | `0x000000000000000000000000000000000014013d` | N/A (ERC-20) |
+| LAZY Token Creator (SCT) | `0.0.1311003` | `0x000000000000000000000000000000000014011b` | N/A |
+| LazyGasStation | `0.0.7221483` | `0x00000000000000000000000000000000006e30eb` | `abi/LazyGasStation.json` |
+| LazyDelegateRegistry | `0.0.7221486` | `0x00000000000000000000000000000000006e30ee` | `abi/LazyDelegateRegistry.json` |
+| LazyNFTStaking | `0.0.7221488` | `0x00000000000000000000000000000000006e30f0` | `abi/LazyNFTStaking.json` |
 | BoostManager | `0.0.8257105` | `0x00000000000000000000000000000000007e0a51` | `abi/BoostManager.json` |
 | PRNG | `0.0.8257116` | `0x00000000000000000000000000000000007e0a5c` | `abi/PrngSystemContract.json` |
 | Mission Template | `0.0.8257118` | `0x00000000000000000000000000000000007e0a5e` | `abi/Mission.json` |
@@ -108,7 +108,7 @@ This is the most critical section for the frontend. **Getting allowances wrong c
 Every operation that costs $LAZY requires the **user to approve the LazyGasStation** (not the mission, not the BoostManager). The LazyGasStation is the single contract that pulls $LAZY from users.
 
 ```
-User approves $LAZY → LazyGasStation (0x...6e376b)
+User approves $LAZY → LazyGasStation (0x...6e30eb)
 ```
 
 **When needed:**

@@ -7,7 +7,8 @@ const { ContractId, TokenId } = require('@hashgraph/sdk');
 const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
 const { parseArgs, printHeader, runScript, confirmOrExit, logResult, parseNestedList, getMultisigOptions, contractExecuteWithMultisig } = require('../../utils/scriptHelpers');
-const { generateStakingRewardProof, Stake } = require('../../utils/LazyNFTStakingHelper');
+const { generateStakingRewardProof, layoutStakesForSigning, Stake } = require('../../utils/LazyNFTStakingHelper');
+const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
 const { checkHbarAllowances } = require('../../utils/hederaMirrorHelpers');
 const { setHbarAllowance } = require('../../utils/hederaHelpers');
 const { calculateStakeGas } = require('../../utils/constants');
@@ -63,10 +64,25 @@ const main = async () => {
 
 	confirmOrExit('Do you want to unstake these NFTs?');
 
+	// On-chain rate caps let the signing layout group large serials (see layoutStakesForSigning);
+	// the signed entries are what gets submitted.
+	const maxBaseRates = {};
+	for (const token of tokenList) {
+		const addr = '0x' + token.toSolidityAddress();
+		const res = await readOnlyEVMFromMirrorNode(env, contractId, lnsIface.encodeFunctionData('getMaxBaseRate', [addr]), operatorId, false);
+		maxBaseRates[addr] = Number(lnsIface.decodeFunctionResult('getMaxBaseRate', res)[0]);
+	}
+	const signedStakes = layoutStakesForSigning(stakes, maxBaseRates);
+	console.log('Signed entries:', JSON.stringify(signedStakes));
+
+	// Each transfer batch (up to 8 NFTs per signed entry) spends 1 tinybar of the HBAR allowance
+	const neededTinybar = signedStakes.reduce((t, e) => t + Math.max(1, Math.ceil(e.serials.length / 8)), 0);
+	const allowanceToSet = Math.max(10, neededTinybar);
+
 	// Check HBAR allowance for staking contract
 	const mirrorHbarAllowances = await checkHbarAllowances(env, operatorId);
 	let hasAllowance = mirrorHbarAllowances.some(
-		a => a.spender === contractId.toString() && a.amount >= 10,
+		a => a.spender === contractId.toString() && a.amount >= neededTinybar,
 	);
 
 	if (hasAllowance) {
@@ -76,18 +92,18 @@ const main = async () => {
 		console.log('ERROR: Insufficient HBAR allowance to Staking Contract');
 		confirmOrExit('Do you want to set the allowance?');
 
-		const res = await setHbarAllowance(client, operatorId, contractId, 10);
+		const res = await setHbarAllowance(client, operatorId, contractId, allowanceToSet);
 		if (res !== 'SUCCESS') {
 			console.log('Error setting HBAR allowance:', res);
 			return;
 		}
-		console.log('ALLOWANCE SET: 10 tinybar allowance to Staking Contract');
+		console.log(`ALLOWANCE SET: ${allowanceToSet} tinybar allowance to Staking Contract`);
 	}
 
 	// Generate signature proof
-	const rewardProof = await generateStakingRewardProof(operatorId, boostRate, signingKey, stakes);
+	const rewardProof = await generateStakingRewardProof(operatorId, boostRate, signingKey, signedStakes, { maxBaseRates });
 
-	const gas = calculateStakeGas(tokenList.length);
+	const gas = calculateStakeGas(signedStakes.length);
 
 	const multisigOptions = getMultisigOptions();
 	const result = await contractExecuteWithMultisig(
@@ -96,7 +112,7 @@ const main = async () => {
 		client,
 		gas,
 		'unstake',
-		[stakes, rewardProof],
+		[signedStakes, rewardProof],
 		multisigOptions,
 	);
 

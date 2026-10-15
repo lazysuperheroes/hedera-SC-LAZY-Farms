@@ -87,6 +87,8 @@ export {
   generateStakingRewardProof,
   validateStake,
   countTotalNFTs,
+  layoutStakesForSigning,
+  assertStakesSigningLayout,
 
   // Farming helpers
   lookupLevel,
@@ -98,3 +100,4 @@ export {
   calculateBoostCost,
   calculateBoostedDuration,
 } from './helpers';
+export type { MaxBaseRates, StakingProofOptions } from './helpers';

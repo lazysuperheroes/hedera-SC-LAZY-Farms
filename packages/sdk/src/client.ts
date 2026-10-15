@@ -36,7 +36,7 @@ import {
   GEM_LEVEL_REDUCTIONS,
   gemLevelForSerial,
 } from './constants';
-import { generateStakingRewardProof, validateStake } from './helpers/staking';
+import { generateStakingRewardProof, validateStake, type StakingProofOptions } from './helpers/staking';
 
 // ABI imports - loaded at runtime to avoid bundling issues
 // (require() for JSON ABIs is intentional; the rule is disabled in eslint.config.mjs)
@@ -290,17 +290,20 @@ export class LazyFarmingSDK {
    */
   async generateRewardProof(
     boostRate: number,
-    stakes: Stake[]
+    stakes: Stake[],
+    options?: StakingProofOptions
   ): Promise<RewardProof> {
     if (!this._signingKey) {
       throw new Error('Signing key required for generating reward proofs');
     }
 
+    // stakes must be in signing layout (layoutStakesForSigning) and submitted as signed
     return generateStakingRewardProof(
       this._operatorId,
       boostRate,
       this._signingKey,
-      stakes
+      stakes,
+      options
     );
   }
 
