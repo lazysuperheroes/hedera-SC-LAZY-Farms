@@ -7,7 +7,7 @@ const { createHederaClient } = require('../../utils/clientFactory');
 const { loadInterface } = require('../../utils/abiLoader');
 const { parseArgs, printHeader, runScript, confirmOrExit, parseNestedList, parseCommaList } = require('../../utils/scriptHelpers');
 const { readOnlyEVMFromMirrorNode } = require('../../utils/solidityHelpers');
-const { generateStakingRewardProof, Stake } = require('../../utils/LazyNFTStakingHelper');
+const { generateStakingRewardProof, layoutStakesForSigning, Stake } = require('../../utils/LazyNFTStakingHelper');
 
 const main = async () => {
 	const { operatorId, signingKey, env } = createHederaClient({
@@ -62,17 +62,20 @@ const main = async () => {
 		console.log('Preparing to Stake:', stakes[i]);
 	}
 
+	// Lay out for signing (no caps passed, so one serial per entry) and verify the signed entries
+	const signedStakes = layoutStakesForSigning(stakes);
+
 	// Create the signature - pack the variables and hash them in the same order and manner as the contract
 	const rewardProof = await generateStakingRewardProof(
 		operatorId,
 		boostRate,
 		signingKey,
-		stakes,
+		signedStakes,
 	);
 
 	const encodedCommand = lnsIface.encodeFunctionData(
 		'isValidSignature',
-		[stakes, rewardProof],
+		[signedStakes, rewardProof],
 	);
 
 	const result = await readOnlyEVMFromMirrorNode(

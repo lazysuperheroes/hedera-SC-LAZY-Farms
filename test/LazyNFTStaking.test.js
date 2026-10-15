@@ -41,6 +41,11 @@ const {
 	Stake,
 	generateStakingRewardProof,
 } = require('../utils/LazyNFTStakingHelper');
+
+// These tests sign proofs only for accounts the test itself controls (operator, Alice, Bob), so the
+// canonical signing layout (layoutStakesForSigning) isn't needed and would change gas. Services that
+// sign for other users must never skip it.
+const SELF_SIGNED = { allowUnsafeLayout: true };
 require('dotenv').config();
 
 // Get operator from .env file
@@ -1113,6 +1118,7 @@ describe('Message Verification', () => {
 			boostRate,
 			signingWalletPK,
 			stakes,
+			SELF_SIGNED,
 		);
 
 		// now verify the proof with the contract
@@ -1267,6 +1273,7 @@ describe('Staking', () => {
 			boostRate,
 			signingWalletPK,
 			stakes,
+			SELF_SIGNED,
 		);
 
 		result = await contractExecuteFunction(
@@ -1297,6 +1304,7 @@ describe('Staking', () => {
 			boostRate,
 			signingWalletPK,
 			stakes,
+			SELF_SIGNED,
 		);
 
 		const result = await contractExecuteFunction(
@@ -1363,6 +1371,7 @@ describe('Staking', () => {
 			boostRate,
 			signingWalletPK,
 			stakes,
+			SELF_SIGNED,
 		);
 
 		result = await contractExecuteFunction(
@@ -1625,6 +1634,7 @@ describe('Staking', () => {
 			boostRate,
 			signingWalletPK,
 			stakes,
+			SELF_SIGNED,
 		);
 
 		result = await contractExecuteFunction(
@@ -1829,6 +1839,7 @@ describe('Staking', () => {
 			boostRate,
 			signingWalletPK,
 			stakes,
+			SELF_SIGNED,
 		);
 
 		result = await contractExecuteFunction(
@@ -2047,6 +2058,7 @@ describe('Staking', () => {
 			boostRate,
 			signingWalletPK,
 			stakes,
+			SELF_SIGNED,
 		);
 
 		result = await contractExecuteFunction(
@@ -2407,6 +2419,7 @@ describe('Halvening', () => {
 			boostRate,
 			signingWalletPK,
 			stakes,
+			SELF_SIGNED,
 		);
 
 		const stakedTimestamp = Date.now();
@@ -2577,6 +2590,7 @@ describe('Halvening', () => {
 			boostRate,
 			signingWalletPK,
 			stakes,
+			SELF_SIGNED,
 		);
 
 		result = await contractExecuteFunction(
@@ -2739,6 +2753,7 @@ describe('Unstaking', () => {
 			boostRate,
 			signingWalletPK,
 			unstake,
+			SELF_SIGNED,
 		);
 
 		result = await contractExecuteFunction(
@@ -2905,6 +2920,7 @@ describe('Unstaking', () => {
 			boostRate,
 			signingWalletPK,
 			unstake,
+			SELF_SIGNED,
 		);
 
 		result = await contractExecuteFunction(
@@ -3017,6 +3033,7 @@ describe('Unstaking', () => {
 			boostRate,
 			signingWalletPK,
 			unstake,
+			SELF_SIGNED,
 		);
 
 		result = await contractExecuteFunction(
